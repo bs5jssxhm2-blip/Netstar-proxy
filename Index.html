@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PAYD Scorer">
+<title>PAYD Risk Scorer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060c14;
+    --surface: #0c1622;
+    --border: #162030;
+    --border2: #1e2e40;
+    --text: #c8d8e8;
+    --muted: #445566;
+    --dim: #2a3a4a;
+    --blue: #3d9be8;
+    --green: #00e5a0;
+    --yellow: #f5a623;
+    --orange: #e8612a;
+    --red: #e02020;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-body: 'Sora', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-text { font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: #e8f0f8; }
+  .logo-sub { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-top: 1px; }
+
+  .badge {
+    background: #0d1e30;
+    border: 1px solid #1a3050;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 9px;
+    color: var(--blue);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+  }
+  .badge.live { background: #001a10; border-color: #00e5a030; color: var(--green); }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tab {
+    padding: 11px 18px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.2s;
+  }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* Main */
+  .main { padding: 16px; max-width: 960px; margin: 0 auto; }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .card-title {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    margin-bottom: 12px;
+  }
+
+  /* Grid */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  /* Buttons */
+  .btn {
+    background: rgba(61,155,232,0.12);
+    border: 1px solid rgba(61,155,232,0.3);
+    border-radius: 8px;
+    color: var(--blue);
+    padding: 8px 16px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn.secondary { background: rgba(68,85,102,0.15); border-color: rgba(68,85,102,0.3); color: var(--muted); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Stat boxes */
+  .stat-box {
+    border-radius: 10px;
+    padding: 13px 14px;
+  }
+  .stat-label { font-size: 9px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; font-family: var(--font-mono); margin-bottom: 5px; }
+  .stat-value { font-size: 20px; font-weight: 700; font-family: var(--font-mono); }
+  .stat-sub { font-size: 9px; color: var(--muted); margin-top: 3px; }
+
+  /* Vehicle cards */
+  .vcard {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 11px 13px;
+    cursor: pointer;
+    margin-bottom: 7px;
+    transition: all 0.15s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .vcard:active { transform: scale(0.98); }
+  .vcard.selected { background: #101e2e; }
+  .vcard-reg { font-size: 13px; color: #d0e0f0; font-weight: 600; }
+  .vcard-driver { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .vcard-loc { font-size: 10px; color: var(--dim); margin-top: 1px; }
+  .vcard-score { font-size: 20px; font-weight: 700; font-family: var(--font-mono); text-align: right; }
+  .vcard-band { font-size: 9px; opacity: 0.7; letter-spacing: 1px; text-transform: uppercase; margin-top: 1px; text-align: right; }
+  .vcard-tap { font-size: 10px; color: var(--dim); }
+
+  /* Feature bars */
+  .fbar { margin-bottom: 12px; }
+  .fbar-header { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .fbar-label { font-size: 11px; color: #7899aa; }
+  .fbar-value { font-size: 11px; font-family: var(--font-mono); }
+  .fbar-track { background: var(--border2); border-radius: 3px; height: 5px; overflow: hidden; }
+  .fbar-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+  .fbar-weight { font-size: 9px; color: var(--dim); margin-top: 2px; }
+
+  /* Loading */
+  .loading-bar {
+    background: var(--surface);
+    border: 1px solid rgba(61,155,232,0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: var(--blue);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+  }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Error */
+  .error-box {
+    background: #140800;
+    border: 1px solid rgba(232,97,42,0.3);
+    border-radius: 8px;
+    padding: 11px 14px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--orange);
+  }
+
+  /* Empty state */
+  .empty {
+    text-align: center;
+    padding: 48px 20px;
+  }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-title { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+  .empty-sub { color: var(--dim); font-size: 11px; line-height: 1.8; }
+
+  /* Gauge */
+  .gauge-wrap { position: relative; width: 200px; height: 130px; margin: 0 auto; }
+  .gauge-score { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); text-align: center; }
+  .gauge-num { font-size: 32px; font-family: var(--font-mono); font-weight: 700; line-height: 1; }
+  .gauge-band { font-size: 9px; opacity: 0.7; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+
+  /* Driver header */
+  .driver-header {
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .driver-name { font-size: 20px; font-weight: 700; color: #e8f0f8; }
+  .driver-reg { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .driver-period { font-size: 10px; color: var(--dim); margin-top: 3px; font-family: var(--font-mono); }
+
+  /* Recommendation */
+  .rec { font-size: 13px; line-height: 1.7; }
+
+  /* Risk dist bars */
+  .rdist-row { margin-bottom: 9px; }
+  .rdist-header { display: flex; justify-content: space-between; margin-bottom: 2px; }
+  .rdist-label { font-size: 11px; }
+  .rdist-count { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+  .rdist-track { background: var(--border2); border-radius: 3px; height: 4px; }
+  .rdist-fill { height: 100%; border-radius: 3px; transition: width 0.8s; }
+
+  /* Fleet avg */
+  .fleet-avg { text-align: center; }
+  .fleet-avg-num { font-size: 44px; font-family: var(--font-mono); font-weight: 700; line-height: 1; }
+  .fleet-avg-band { font-size: 10px; opacity: 0.7; letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; }
+  .fleet-avg-sub { font-size: 10px; color: var(--dim); margin-top: 6px; }
+
+  /* Inputs */
+  .input {
+    background: #080e18;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    width: 100%;
+    outline: none;
+    -webkit-appearance: none;
+  }
+  .input-label { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; font-family: var(--font-mono); margin-bottom: 5px; display: block; }
+
+  /* Raw debug */
+  .raw-toggle { font-size: 10px; color: var(--dim); background: none; border: 1px solid var(--border2); border-radius: 4px; padding: 3px 8px; cursor: pointer; font-family: var(--font-mono); margin-top: 8px; }
+  .raw-pre { font-size: 10px; color: var(--muted); background: #050a12; border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-top: 6px; overflow: auto; max-height: 260px; white-space: pre-wrap; word-break: break-all; }
+
+  /* Section header row */
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .section-title { font-size: 16px; font-weight: 700; color: #e0eaf8; }
+
+  /* Scrollable list */
+  .vlist { max-height: 66vh; overflow-y: auto; padding-right: 4px; -webkit-overflow-scrolling: touch; }
+
+  /* Worker status */
+  .worker-url { font-family: var(--font-mono); font-size: 11px; color: var(--blue); word-break: break-all; }
+  .worker-status { font-size: 10px; color: var(--green); margin-top: 6px; }
+
+  @media (max-width: 600px) {
+    .grid3 { grid-template-columns: 1fr 1fr; }
+    .grid3 .stat-box:last-child { grid-column: span 2; }
+    .driver-header { flex-direction: column; }
+    .gauge-wrap { width: 160px; height: 105px; }
+    .gauge-num { font-size: 26px; }
+  }
+
+  /* Page sections */
+  .page { display: none; }
+  .page.active { display: block; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo">
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+      <circle cx="14" cy="14" r="13" stroke="#3d9be8" stroke-width="1.5"/>
+      <path d="M7 18 L14 8 L21 18" stroke="#3d9be8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="14" cy="18" r="2" fill="#3d9be8"/>
+    </svg>
+    <div>
+      <div class="logo-text">PAYD Risk Scorer</div>
+      <div class="logo-sub">Netstar FleetAI · ML Loss Cost</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;align-items:center">
+    <span id="live-badge" class="badge live" style="display:none">● Live</span>
+    <span class="badge">v2.7</span>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('fleet')">Fleet</button>
+  <button class="tab" onclick="showTab('detail')">Driver</button>
+  <button class="tab" onclick="showTab('settings')">Settings</button>
+</div>
+
+<div class="main">
+  <div id="loading-bar" class="loading-bar" style="display:none">
+    <span class="spin">◌</span>
+    <span id="loading-msg">Connecting…</span>
+  </div>
+  <div id="error-box" class="error-box" style="display:none">
+    <div id="error-msg"></div>
+    <button class="raw-toggle" onclick="toggleRaw()" id="raw-btn" style="display:none">▼ raw response</button>
+    <pre id="raw-pre" class="raw-pre" style="display:none"></pre>
+  </div>
+
+  <!-- FLEET PAGE -->
+  <div id="page-fleet" class="page active">
+    <div class="section-header">
+      <h2 class="section-title">Fleet Overview</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn secondary" onclick="loadVehicles()">↻ Vehicles</button>
+        <button class="btn" onclick="scoreAll()">⚡ Score All</button>
+      </div>
+    </div>
+    <div id="fleet-content">
+      <div class="card empty">
+        <div class="empty-icon">🚗</div>
+        <div class="empty-title">No vehicles loaded.</div>
+        <div class="empty-sub">
+          Click <b style="color:#3d9be8">⚡ Score All</b> to fetch and score all drivers,<br>
+          or <b style="color:#445566">↻ Vehicles</b> to load the list first.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL PAGE -->
+  <div id="page-detail" class="page">
+    <div id="detail-content">
+      <div class="card" style="text-align:center;padding:36px;color:var(--muted);font-size:13px">
+        Select a vehicle from Fleet View.
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PAGE -->
+  <div id="page-settings" class="page">
+    <h2 class="section-title" style="margin-bottom:12px">Settings</h2>
+    <div class="card">
+      <div class="grid2" style="margin-bottom:10px">
+        <div>
+          <label class="input-label">Start Date</label>
+          <input class="input" type="date" id="start-date">
+        </div>
+        <div>
+          <label class="input-label">End Date</label>
+          <input class="input" type="date" id="end-date">
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted)">Blank = last 30 days.</div>
+    </div>
+    <div class="card">
+      <label class="input-label">Annual KM — <span id="km-label">15,000</span></label>
+      <input type="range" min="5000" max="80000" step="1000" value="15000" id="annual-km"
+        oninput="document.getElementById('km-label').textContent=Number(this.value).toLocaleString()"
+        style="width:100%;accent-color:#3d9be8;margin-top:6px">
+    </div>
+    <div class="card">
+      <div class="card-title">Worker Connection</div>
+      <div class="worker-url">https://tight-dream-d2e5.shaunbr.workers.dev</div>
+      <div class="worker-status">● tight-dream-d2e5.shaunbr.workers.dev</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PROXY = 'https://tight-dream-d2e5.shaunbr.workers.dev';
+
+const RISK_BANDS = [
+  { label:'Excellent', min:0,  max:20,  color:'#00e5a0', bg:'#001a12' },
+  { label:'Good',      min:20, max:40,  color:'#7ed321', bg:'#0d1a00' },
+  { label:'Moderate',  min:40, max:60,  color:'#f5a623', bg:'#1a1000' },
+  { label:'High',      min:60, max:80,  color:'#e8612a', bg:'#1a0800' },
+  { label:'Critical',  min:80, max:100, color:'#e02020', bg:'#1a0000' },
+];
+
+const FEATURES = {
+  harsh_braking_rate:      { label:'Harsh Braking',      unit:'events', max:15, w:22 },
+  harsh_acceleration_rate: { label:'Harsh Acceleration',  unit:'events', max:12, w:18 },
+  speeding_rate:           { label:'Speeding',            unit:'%',      max:40, w:25 },
+  night_driving_pct:       { label:'Night Driving',       unit:'%',      max:50, w:12 },
+  fatigue_events_rate:     { label:'Fatigue Events',      unit:'events', max:5,  w:15 },
+  distraction_events_rate: { label:'Distraction Events',  unit:'events', max:8,  w:8  },
+};
+
+let vehicles = [];
+let selectedVehicle = null;
+let lastRaw = null;
+let rawVisible = false;
+
+function getBand(s) { return RISK_BANDS.find(b=>s>=b.min&&s<b.max)||RISK_BANDS[4]; }
+function safe(v) { const n=parseFloat(v); return isNaN(n)||n<0?0:n; }
+
+function showTab(t) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+t).classList.add('active');
+  document.querySelectorAll('.tab').forEach(b=>{ if(b.textContent.toLowerCase().includes(t)||b.onclick.toString().includes(t)) b.classList.add('active'); });
+  // fix tab highlight
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(b=>b.classList.remove('active'));
+  const map = {fleet:0,detail:1,settings:2};
+  tabs[map[t]].classList.add('active');
+}
+
+function setLoading(show, msg) {
+  const el = document.getElementById('loading-bar');
+  el.style.display = show ? 'flex' : 'none';
+  if(msg) document.getElementById('loading-msg').textContent = msg;
+}
+
+function setError(msg, raw) {
+  const el = document.getElementById('error-box');
+  if(!msg) { el.style.display='none'; return; }
+  el.style.display = 'block';
+  document.getElementById('error-msg').textContent = '⚠ ' + msg;
+  lastRaw = raw || null;
+  const rawBtn = document.getElementById('raw-btn');
+  rawBtn.style.display = raw ? 'inline-block' : 'none';
+  document.getElementById('raw-pre').style.display = 'none';
+  rawVisible = false;
+  rawBtn.textContent = '▼ raw response';
+}
+
+function toggleRaw() {
+  rawVisible = !rawVisible;
+  const pre = document.getElementById('raw-pre');
+  const btn = document.getElementById('raw-btn');
+  pre.style.display = rawVisible ? 'block' : 'none';
+  btn.textContent = rawVisible ? '▲ hide' : '▼ raw response';
+  if(rawVisible && lastRaw) pre.textContent = JSON.stringify(lastRaw, null, 2);
+}
+
+async function apiFetch(path) {
+  const res = await fetch(PROXY + path);
+  if(!res.ok) { const t=await res.text().catch(()=>''); throw new Error(res.status+': '+t.slice(0,200)); }
+  return res.json();
+}
+
+function buildQuery(params) {
+  const q = new URLSearchParams();
+  for(const[k,v] of Object.entries(params)) if(v!==null&&v!==undefined&&v!=='') q.set(k,String(v));
+  return q.toString() ? '?'+q : '';
+}
+
+function getAnnualKm() { return parseInt(document.getElementById('annual-km').value)||15000; }
+function getStartDate() { return document.getElementById('start-date').value||null; }
+function getEndDate() { return document.getElementById('end-date').value||null; }
+
+async function loadVehicles() {
+  setLoading(true,'Loading vehicles from Netstar…'); setError(null);
+  try {
+    const data = await apiFetch('/vehicles');
+    if(data.error) throw new Error(data.error);
+    if(!data.vehicles||!data.vehicles.length) throw new Error('No vehicles returned.');
+    vehicles = data.vehicles;
+    document.getElementById('live-badge').style.display='inline-block';
+    renderFleet();
+    showTab('fleet');
+  } catch(e) { setError(e.message); }
+  finally { setLoading(false); }
+}
+
+async function scoreAll() {
+  setLoading(true,'Fetching all driver scores…'); setError(null);
+  try {
+    const q = buildQuery({annual_km:getAnnualKm(),start_date:getStartDate(),end_date:getEndDate()});
+    const data = await apiFetch('/fleet-scores'+q);
+    lastRaw = data;
+    if(data.error) throw new Error(data.error);
+    if(!data.vehicles||!data.vehicles.length) throw new Error('No driver data returned. Try adjusting date range in Settings.');
+    vehicles = data.vehicles;
+    document.getElementById('live-badge').style.display='inline-block';
+    renderFleet();
+    showTab('fleet');
+  } catch(e) { setError(e.message, lastRaw); }
+  finally { setLoading(false); }
+}
+
+async function scoreDriver(v) {
+  setLoading(true,'Scoring '+( v.registration||v.imei)+'…'); setError(null);
+  selectedVehicle = v;
+  showTab('detail');
+  document.getElementById('detail-content').innerHTML = '<div style="text-align:center;padding:52px;color:var(--muted)"><div class="spin" style="font-size:26px;display:block;margin-bottom:10px">◌</div><div style="font-size:11px;letter-spacing:2px;text-transform:uppercase">Scoring driver…</div></div>';
+  try {
+    const q = buildQuery({imei:v.imei||v.id,annual_km:getAnnualKm(),start_date:getStartDate(),end_date:getEndDate()});
+    const data = await apiFetch('/driver-score'+q);
+    lastRaw = data;
+    if(data.error) throw new Error(data.error);
+    renderDetail(data);
+    vehicles = vehicles.map(x=>(x.imei||x.id)===(v.imei||v.id)?{...x,risk_score:data.risk_score}:x);
+    renderFleet();
+  } catch(e) {
+    setError(e.message, lastRaw);
+    document.getElementById('detail-content').innerHTML = '<div class="card" style="text-align:center;padding:36px;color:var(--muted);font-size:13px">Error loading driver data.</div>';
+  }
+  finally { setLoading(false); }
+}
+
+function renderFleet() {
+  if(!vehicles.length) return;
+  const scored = vehicles.filter(v=>v.risk_score!=null);
+
+  let listHTML = vehicles.map(v=>{
+    const b = v.risk_score!=null ? getBand(v.risk_score) : null;
+    const sel = selectedVehicle&&(selectedVehicle.imei||selectedVehicle.id)===(v.imei||v.id);
+    return `<div class="vcard${sel?' selected':''}" style="${sel&&b?'border-color:'+b.color+';box-shadow:0 0 12px '+b.color+'28':''}" onclick="scoreDriver(${JSON.stringify(v).replace(/"/g,'&quot;')})">
+      <div>
+        <div class="vcard-reg">${v.registration||v.imei||'—'}</div>
+        <div class="vcard-driver">${v.driver_name||'Unknown'}${v.location?' · '+v.location:''}</div>
+        ${v.make?'<div class="vcard-loc">'+v.make+'</div>':''}
+      </div>
+      ${b
+        ? `<div><div class="vcard-score" style="color:${b.color}">${v.risk_score.toFixed(0)}</div><div class="vcard-band" style="color:${b.color}">${b.label}</div></div>`
+        : `<div class="vcard-tap">tap to score</div>`
+      }
+    </div>`;
+  }).join('');
+
+  let distHTML = RISK_BANDS.map(b=>{
+    const n = scored.filter(v=>v.risk_score>=b.min&&v.risk_score<b.max).length;
+    const p = scored.length?(n/scored.length)*100:0;
+    return `<div class="rdist-row">
+      <div class="rdist-header"><span class="rdist-label" style="color:${b.color}">${b.label}</span><span class="rdist-count">${n}</span></div>
+      <div class="rdist-track"><div class="rdist-fill" style="width:${p}%;background:${b.color}"></div></div>
+    </div>`;
+  }).join('');
+
+  let avgHTML = '';
+  if(scored.length) {
+    const avg = scored.reduce((a,v)=>a+v.risk_score,0)/scored.length;
+    const b = getBand(avg);
+    avgHTML = `<div class="card fleet-avg">
+      <div class="card-title">Fleet Average</div>
+      <div class="fleet-avg-num" style="color:${b.color}">${avg.toFixed(1)}</div>
+      <div class="fleet-avg-band" style="color:${b.color}">${b.label}</div>
+      <div class="fleet-avg-sub">${scored.length}/${vehicles.length} scored</div>
+    </div>`;
+  }
+
+  document.getElementById('fleet-content').innerHTML = `
+    <div class="grid2">
+      <div>
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">${vehicles.length} vehicles · tap to score</div>
+        <div class="vlist">${listHTML}</div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="card-title">Risk Distribution</div>
+          ${distHTML}
+        </div>
+        ${avgHTML}
+      </div>
+    </div>`;
+}
+
+function gaugeHTML(score) {
+  const band = getBand(score);
+  const angle = -135 + (score/100)*270;
+  const R = a => a*Math.PI/180;
+  const pt = (r,a) => ({x:110+r*Math.cos(R(a)), y:120+r*Math.sin(R(a))});
+  const arc = (a1,a2,lg) => {
+    const s=pt(90,a1),e=pt(90,a2);
+    return `M ${s.x} ${s.y} A 90 90 0 ${lg?1:0} 1 ${e.x} ${e.y}`;
+  };
+  const n = pt(70,angle);
+  const segmentsHTML = RISK_BANDS.map(b=>{
+    const a1=-135+(b.min/100)*270, a2=-135+(b.max/100)*270;
+    return `<path d="${arc(a1,a2,false)}" fill="none" stroke="${b.color}" stroke-width="16" stroke-linecap="butt" opacity="0.3"/>`;
+  }).join('');
+  return `<div class="gauge-wrap">
+    <svg viewBox="0 0 220 140" width="200" height="130">
+      <path d="M 20 120 A 90 90 0 1 1 200 120" fill="none" stroke="#1e2a3a" stroke-width="16" stroke-linecap="round"/>
+      ${segmentsHTML}
+      <path d="${arc(-135,angle,score>50)}" fill="none" stroke="${band.color}" stroke-width="16" stroke-linecap="round"/>
+      <line x1="110" y1="120" x2="${n.x}" y2="${n.y}" stroke="${band.color}" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="110" cy="120" r="5" fill="${band.color}"/>
+    </svg>
+    <div class="gauge-score">
+      <div class="gauge-num" style="color:${band.color}">${score.toFixed(1)}</div>
+      <div class="gauge-band" style="color:${band.color}">${band.label}</div>
+    </div>
+  </div>`;
+}
+
+function renderDetail(d) {
+  const band = getBand(d.risk_score);
+  const features = d.features || {};
+
+  const statsHTML = [
+    {label:'Risk Score',    value:d.risk_score.toFixed(1),                      sub:band.label,   color:band.color},
+    {label:'Predicted Loss',value:'R '+(d.predicted_loss_cost||0).toLocaleString(), sub:'Annual ZAR', color:'#f5a623'},
+    {label:'Netstar Score', value:d.netstar_driver_score>0?d.netstar_driver_score.toFixed(0):'N/A', sub:'Platform', color:'#3d9be8'},
+  ].map(s=>`<div class="stat-box" style="background:${s.color}11;border:1px solid ${s.color}33">
+    <div class="stat-label">${s.label}</div>
+    <div class="stat-value" style="color:${s.color}">${s.value}</div>
+    <div class="stat-sub">${s.sub}</div>
+  </div>`).join('');
+
+  const usageHTML = [
+    {label:'Total Distance', value:(d.total_distance_km||0).toLocaleString()+' km', color:'#3d9be8'},
+    {label:'Total Trips',    value:(d.total_trips||0).toLocaleString(),              color:'#3d9be8'},
+  ].map(s=>`<div class="stat-box" style="background:${s.color}11;border:1px solid ${s.color}33">
+    <div class="stat-label">${s.label}</div>
+    <div class="stat-value" style="color:${s.color};font-size:18px">${s.value}</div>
+  </div>`).join('');
+
+  const fbarsHTML = Object.entries(FEATURES).map(([k,m])=>{
+    const val = safe(features[k])||0;
+    const pct = Math.min((val/m.max)*100,100);
+    const b = getBand(pct);
+    return `<div class="fbar">
+      <div class="fbar-header">
+        <span class="fbar-label">${m.label}</span>
+        <span class="fbar-value" style="color:${b.color}">${val.toFixed(2)} ${m.unit}</span>
+      </div>
+      <div class="fbar-track"><div class="fbar-fill" style="width:${pct}%;background:${b.color};box-shadow:0 0 5px ${b.color}80"></div></div>
+      <div class="fbar-weight">Weight ${m.w}%</div>
+    </div>`;
+  }).join('');
+
+  let recHTML = '';
+  if(d.risk_score<30) recHTML=`<p class="rec" style="color:#00e5a0">✓ <b>Low-risk.</b> Max PAYD discount (25–35% off base). Annual review only.</p>`;
+  else if(d.risk_score<55) recHTML=`<p class="rec" style="color:#f5a623">◉ <b>Moderate.</b> Standard loading. Telematics coaching recommended.</p>`;
+  else if(d.risk_score<75) recHTML=`<p class="rec" style="color:#e8612a">⚠ <b>Elevated.</b> 15–25% loading. Mandatory coaching.</p>`;
+  else recHTML=`<p class="rec" style="color:#e02020">✗ <b>High risk.</b> Manual review. 30%+ loading or decline.</p>`;
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="driver-header" style="background:${band.bg};border:1px solid ${band.color}44">
+      <div>
+        <div class="driver-name">${d.driver_name||'Unknown'}</div>
+        <div class="driver-reg">${d.registration||d.imei||''}${d.company?' · '+d.company:''}</div>
+        <div class="driver-period">${d.period_from||''} → ${d.period_to||''}</div>
+      </div>
+      ${gaugeHTML(d.risk_score)}
+    </div>
+    <div class="grid3" style="margin-bottom:12px">${statsHTML}</div>
+    <div class="grid2" style="margin-bottom:12px">${usageHTML}</div>
+    <div class="card">
+      <div class="card-title">Telematics Breakdown</div>
+      ${fbarsHTML}
+    </div>
+    <div class="card">
+      <div class="card-title">Underwriting Recommendation</div>
+      ${recHTML}
+    </div>
+    <div style="margin-top:8px">
+      <button class="raw-toggle" onclick="showDetailRaw()">▼ raw response</button>
+      <pre id="detail-raw" class="raw-pre" style="display:none"></pre>
+    </div>
+    <div style="font-size:10px;color:var(--dim);text-align:center;margin-top:10px">IMEI: ${d.imei||'—'} · Netstar Telematics Platform API v2</div>`;
+}
+
+function showDetailRaw() {
+  const pre = document.getElementById('detail-raw');
+  const btn = event.target;
+  if(pre.style.display==='none') {
+    pre.style.display='block';
+    pre.textContent = JSON.stringify(lastRaw,null,2);
+    btn.textContent='▲ hide';
+  } else {
+    pre.style.display='none';
+    btn.textContent='▼ raw response';
+  }
+}
+</script>
+</body>
+</html>
