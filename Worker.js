@@ -40,7 +40,9 @@ async function handleFleetScores(url){
   var annual_km=parseInt(url.searchParams.get("annual_km")||"15000");
   var start=toNetstar(url.searchParams.get("start_date"))||DATE_FROM;
   var end=toNetstar(url.searchParams.get("end_date"),true)||DATE_TO;
-  var results=await Promise.all([getVehicleList(),getDriverPerf(start,end)]);
+  var vlist=await getVehicleList();
+var list=await getDriverPerf(start,end);
+var results=[vlist,list];
   var vlist=results[0];
   var list=results[1];
   if(!list.length)throw new Error("No driver data for this period.");
