@@ -1,185 +1,52 @@
 const NETSTAR_BASE = "https://fleetai-api.netstaraus.com.au";
-const ALLOWED_ORIGIN = "*";
+const NETSTAR_API_KEY = "aROAW0rN00qS3Ar5iOnog";
+const COMPANY = "Netstar Demo";
+const LOCATION = "Netstar Demo";
+const DATE_FROM = "07-04-2026 00:00:01";
+const DATE_TO = "13-04-2026 23:59:59";
+const GITHUB_RAW = "https://raw.githubusercontent.com/bs5jssxhm2-blip/Netstar-proxy/main";
 
-function cors(origin) {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, x-api-key, Authorization",
-    "Access-Control-Max-Age": "86400",
-  };
-}
+function cors(){return{"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type,x-api-key,Authorization","Access-Control-Max-Age":"86400"};}
+function json(data,status){status=status||200;return new Response(JSON.stringify(data),{status:status,headers:{"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}});}
+function err(msg,status){return json({error:msg},status||400);}
+function pad(n){return String(n).padStart(2,"0");}
+function toNetstar(s,endOfDay){if(!s)return null;var d=new Date(s);if(isNaN(d))return null;if(endOfDay)d.setUTCHours(23,59,59);return pad(d.getUTCDate())+"-"+pad(d.getUTCMonth()+1)+"-"+d.getUTCFullYear()+" "+pad(d.getUTCHours())+":"+pad(d.getUTCMinutes())+":"+pad(d.getUTCSeconds());}
+function safe(v){var n=parseFloat(v);return isNaN(n)||n<0?0:n;}
+function calcRisk(r){var braking=safe(r.harsh_breaking||0),accel=safe(r.harsh_acceleration||0),cornering=safe(r.harsh_cornering||0);var speeding=safe(r.over_speed||0),night=safe(r.night_drive||0),idling=safe(r.idling||0);var avgSpd=safe(r.avg_speed||0),maxSpd=safe(r.max_speed||0),km=safe(r.total_running_km||0);var per100=km>0?100/km:1;var eventScore=(braking*3.0*per100)+(accel*2.5*per100)+(cornering*2.0*per100)+(speeding*3.5*per100)+(night*1.5*per100)+(idling*0.5*per100);var speedPenalty=0;if(avgSpd>80)speedPenalty+=15;else if(avgSpd>60)speedPenalty+=5;if(maxSpd>130)speedPenalty+=20;else if(maxSpd>110)speedPenalty+=10;else if(maxSpd>100)speedPenalty+=5;var raw=Math.min(eventScore*10+speedPenalty,100);return{risk_score:Math.round(Math.min(Math.max(raw,0),100)*10)/10,features:{harsh_breaking:braking,harsh_acceleration:accel,harsh_cornering:cornering,over_speed:speeding,night_drive:night,idling:idling}};}
+function lossCost(sc,km){km=km||15000;return Math.round(1200*(Math.exp(sc/35)-0.9)*Math.sqrt(km/15000));}
+function riskBand(sc){if(sc<20)return"Excellent";if(sc<40)return"Good";if(sc<60)return"Moderate";if(sc<80)return"High";return"Critical";}
+function mapVehicles(raw){var vehicles=[];try{var data=raw.data||raw,branches=data.branch||[];for(var i=0;i<branches.length;i++){var branch=branches[i],bv=branch.vehicles||[];for(var j=0;j<bv.length;j++){var v=bv[j];vehicles.push({imei:v.imei_no||"",id:v.imei_no||"",registration:v.vehicle_no||v.device_name||"",driver_name:v.driver_name||"Unknown",make:v.device_model||"",company:data.company_name||COMPANY,location:branch.branch_name||""});}}}catch(e){vehicles=[];}return{vehicles:vehicles,total:vehicles.length};}
+async function netstarPOST(path,body){var res=await fetch(NETSTAR_BASE+path,{method:"POST",headers:{"Content-Type":"application/json","x-api-key":NETSTAR_API_KEY,"Accept":"application/json"},body:JSON.stringify(body)});var text=await res.text();if(!res.ok)throw new Error("Netstar "+res.status+": "+text.slice(0,300));try{return JSON.parse(text);}catch(e){throw new Error("Non-JSON: "+text.slice(0,300));}}
+async function getDriverPerf(start,end){var q=new URLSearchParams({company_names:COMPANY,location_names:LOCATION,start_date_time:start,end_date_time:end});var res=await fetch(NETSTAR_BASE+"/external/drivers/driver-performance-summary?"+q.toString(),{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});var text=await res.text();if(!res.ok)throw new Error("Netstar "+res.status+": "+text.slice(0,300));var data=JSON.parse(text);if(data.status==="fail")throw new Error(data.message||"Driver performance request failed");return Array.isArray(data)?data:(data.data||data.result||[]);}
+async function handleVehicles(){var raw=await netstarPOST("/external/company-vehicles",{});return json(mapVehicles(raw));}
+async function handleDriverScore(url){var imei=url.searchParams.get("imei")||null;var annual_km=parseInt(url.searchParams.get("annual_km")||"15000");var start=toNetstar(url.searchParams.get("start_date"))||DATE_FROM;var end=toNetstar(url.searchParams.get("end_date"),true)||DATE_TO;if(!imei)throw new Error("imei parameter required");var list=await getDriverPerf(start,end);if(!list.length)throw new Error("No driver data for this period.");var r=list[0];for(var i=0;i<list.length;i++){if((list[i].imei_no||list[i].imei||"")===imei){r=list[i];break;}}var scored=calcRisk(r);return json({imei:imei,driver_name:r.driver_name||r.driver||"Unknown",registration:r.object||r.vehicle_no||imei,company:r.company_name||r.branch_name||COMPANY,period_from:start,period_to:end,features:scored.features,risk_score:scored.risk_score,risk_band:riskBand(scored.risk_score),predicted_loss_cost:lossCost(scored.risk_score,annual_km),total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A",avg_speed:safe(r.avg_speed||0),max_speed:safe(r.max_speed||0),netstar_driver_score:0,raw_record:r});}
+async function handleFleetScores(url){var annual_km=parseInt(url.searchParams.get("annual_km")||"15000");var start=toNetstar(url.searchParams.get("start_date"))||DATE_FROM;var end=toNetstar(url.searchParams.get("end_date"),true)||DATE_TO;var list=await getDriverPerf(start,end);if(!list.length)throw new Error("No driver data for this period.");var scored=list.map(function(r){var s=calcRisk(r);return{imei:r.imei_no||r.imei||"",id:r.imei_no||r.imei||"",registration:r.object||r.vehicle_no||"",driver_name:r.driver_name||r.driver||"Unknown",company:r.company_name||r.branch_name||COMPANY,features:s.features,risk_score:s.risk_score,risk_band:riskBand(s.risk_score),predicted_loss_cost:lossCost(s.risk_score,annual_km),netstar_driver_score:0,total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A"};});scored.sort(function(a,b){return b.risk_score-a.risk_score;});return json({vehicles:scored,total:scored.length,period_from:start,period_to:end});}
+async function handleTest(url){var start=url.searchParams.get("start")||DATE_FROM;var end=url.searchParams.get("end")||DATE_TO;var q=new URLSearchParams({company_names:COMPANY,location_names:LOCATION,start_date_time:start,end_date_time:end});var res=await fetch(NETSTAR_BASE+"/external/drivers/driver-performance-summary?"+q.toString(),{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});var text=await res.text();return json({status:res.status,body:text.slice(0,1000)});}
 
-function json(data, status = 200, origin = "*") {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...cors(origin) },
-  });
-}
+addEventListener("fetch",function(event){event.respondWith(handle(event.request));});
 
-function err(msg, status = 400, origin = "*") {
-  return json({ error: msg }, status, origin);
-}
-
-function pad(n) { return String(n).padStart(2, "0"); }
-function toNetstarDate(d) {
-  return `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-function toNetstar(s, endOfDay = false) {
-  if (!s) return null;
-  if (/^\d{2}-\d{2}-\d{4}/.test(s)) return s;
-  const d = new Date(s);
-  if (isNaN(d)) return null;
-  if (endOfDay) d.setHours(23, 59, 59);
-  return toNetstarDate(d);
-}
-function defaultRange() {
-  const to = new Date(), from = new Date(to - 30 * 86400000);
-  return { from: toNetstarDate(from), to: toNetstarDate(to) };
-}
-
-async function netstar(path, apiKey, body) {
-  const res = await fetch(`${NETSTAR_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": apiKey, Accept: "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) { const t = await res.text().catch(() => ""); throw new Error(`Netstar ${res.status}: ${t.slice(0,300)}`); }
-  return res.json();
-}
-
-const WEIGHTS = { harsh_braking_rate:0.22, harsh_acceleration_rate:0.18, speeding_rate:0.25, night_driving_pct:0.12, fatigue_events_rate:0.15, distraction_events_rate:0.08 };
-const MAX_VALS = { harsh_braking_rate:15, harsh_acceleration_rate:12, speeding_rate:40, night_driving_pct:50, fatigue_events_rate:5, distraction_events_rate:8 };
-
-function riskScore(f) {
-  let s = 0;
-  for (const [k,w] of Object.entries(WEIGHTS)) s += Math.min((f[k]||0)/MAX_VALS[k],1)*w*100;
-  return Math.round(Math.min(Math.pow(s/100,0.85)*100,100)*10)/10;
-}
-function lossCost(sc, km=15000) { return Math.round(1200*(Math.exp(sc/35)-0.9)*Math.sqrt(km/15000)); }
-function riskBand(sc) { return sc<20?"Excellent":sc<40?"Good":sc<60?"Moderate":sc<80?"High":"Critical"; }
-function safe(v) { const n=parseFloat(v); return isNaN(n)||n<0?0:n; }
-
-function mapVehicles(raw) {
-  const list = Array.isArray(raw)?raw:raw.data||raw.result||raw.vehicles||[];
-  return {
-    vehicles: list.map(v=>({
-      imei: v.imei_no||v.imei||v.ImeiNo||"",
-      id: v.imei_no||v.imei||v.ImeiNo||"",
-      registration: v.registration||v.reg_no||v.object_name||v.ObjectName||"",
-      driver_name: v.driver_name||v.DriverName||v.employee_name||"Unknown",
-      make: v.make||v.Make||"",
-      model: v.model||v.Model||"",
-      company: v.company_name||v.CompanyName||"",
-      location: v.location_name||v.LocationName||"",
-    })),
-    total: list.length,
-  };
-}
-
-function rowToFeatures(r) {
-  return {
-    harsh_braking_rate:      safe(r.harsh_braking_count||r.HarshBrakingCount||r.harsh_braking||0),
-    harsh_acceleration_rate: safe(r.harsh_acceleration_count||r.HarshAccelerationCount||r.harsh_acceleration||0),
-    speeding_rate:           safe(r.speeding_percentage||r.SpeedingPercentage||r.over_speed_percentage||0),
-    night_driving_pct:       safe(r.night_driving_percentage||r.NightDrivingPercentage||r.night_percentage||0),
-    fatigue_events_rate:     safe(r.fatigue_count||r.FatigueCount||r.fatigue_events||0),
-    distraction_events_rate: safe(r.distraction_count||r.DistractionCount||r.distraction_events||0),
-  };
-}
-
-async function handleVehicles(url, apiKey, origin) {
-  const company_name = url.searchParams.get("company_name")||null;
-  const raw_names = url.searchParams.get("company_names");
-  const company_names = raw_names?raw_names.split(",").map(s=>s.trim()):null;
-  const raw = await netstar("/external/company-vehicles", apiKey, {
-    ...(company_name&&{company_name}), ...(company_names&&{company_names}),
-  });
-  return json(mapVehicles(raw), 200, origin);
-}
-
-async function handleFleetScores(url, apiKey, origin) {
-  const company_names = url.searchParams.get("company_names")||null;
-  const annual_km = parseInt(url.searchParams.get("annual_km")||"15000",10);
-  const range = defaultRange();
-  const start = toNetstar(url.searchParams.get("start_date"))||range.from;
-  const end = toNetstar(url.searchParams.get("end_date"),true)||range.to;
-  const raw = await netstar("/external/drivers/driver-performance-summary", apiKey, {
-    start_date_time:start, end_date_time:end, ...(company_names&&{company_names}),
-  });
-  const list = Array.isArray(raw)?raw:raw.data||raw.result||[];
-  const scored = list.map(r=>{
-    const features=rowToFeatures(r), sc=riskScore(features);
-    return {
-      imei:r.imei_no||r.imei||r.ImeiNo||"", id:r.imei_no||r.imei||r.ImeiNo||"",
-      registration:r.registration||r.reg_no||r.object_name||"",
-      driver_name:r.driver_name||r.employee_name||"Unknown",
-      company:r.company_name||"", features, risk_score:sc, risk_band:riskBand(sc),
-      predicted_loss_cost:lossCost(sc,annual_km),
-      netstar_driver_score:safe(r.driver_score||r.DriverScore||0),
-      total_distance_km:safe(r.total_distance||r.TotalDistance||0),
-      total_trips:safe(r.total_trips||r.TotalTrips||0),
-    };
-  }).sort((a,b)=>b.risk_score-a.risk_score);
-  return json({vehicles:scored,total:scored.length,period_from:start,period_to:end},200,origin);
-}
-
-async function handleDriverScore(url, apiKey, origin) {
-  const imei = url.searchParams.get("imei")||null;
-  const company_names = url.searchParams.get("company_names")||null;
-  const annual_km = parseInt(url.searchParams.get("annual_km")||"15000",10);
-  const range = defaultRange();
-  const start = toNetstar(url.searchParams.get("start_date"))||range.from;
-  const end = toNetstar(url.searchParams.get("end_date"),true)||range.to;
-  const baseBody = { start_date_time:start, end_date_time:end, ...(company_names&&{company_names}) };
-  const perfRaw = await netstar("/external/drivers/driver-performance-summary", apiKey, baseBody);
-  const list = Array.isArray(perfRaw)?perfRaw:perfRaw.data||perfRaw.result||[];
-  const r = imei?(list.find(x=>(x.imei_no||x.imei||x.ImeiNo)===imei)||list[0]||{}):(list[0]||{});
-  const features = rowToFeatures(r);
-  if (imei) {
-    try {
-      const osRaw = await netstar("/external/reports/overspeed-summary", apiKey, {...baseBody,imeis:[imei]});
-      const osList = Array.isArray(osRaw)?osRaw:osRaw.data||osRaw.result||[];
-      const pct = safe((osList[0]||{}).over_speed_percentage||(osList[0]||{}).OverSpeedPercentage||0);
-      if (pct>0) features.speeding_rate=pct;
-    } catch(_) {}
+async function handle(request){
+  var url=new URL(request.url);
+  var method=request.method.toUpperCase();
+  if(method==="OPTIONS")return new Response(null,{status:204,headers:cors()});
+  var csp={"Content-Security-Policy":"default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"};
+  if(url.pathname==="/"||url.pathname===""){
+    var html=await fetch(GITHUB_RAW+"/index.html").then(function(r){return r.text();});
+    return new Response(html,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
-  let totalDistance=safe(r.total_distance||r.TotalDistance||0), totalTrips=safe(r.total_trips||r.TotalTrips||0);
-  if (imei) {
-    try {
-      const tripsRaw = await netstar("/external/reports/trip-summary", apiKey, {...baseBody,imeis:[imei]});
-      const tList = Array.isArray(tripsRaw)?tripsRaw:tripsRaw.data||tripsRaw.result||[];
-      const dist = tList.reduce((a,t)=>a+safe(t.distance||t.Distance||t.total_distance||0),0);
-      if (dist>0) { totalDistance=dist; totalTrips=tList.length; }
-    } catch(_) {}
+  if(url.pathname==="/roi"){
+    var roi=await fetch(GITHUB_RAW+"/roi.html").then(function(r){return r.text();});
+    return new Response(roi,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
-  const sc = riskScore(features);
-  return json({ imei, driver_name:r.driver_name||r.employee_name||"Unknown",
-    registration:r.registration||r.reg_no||r.object_name||"", company:r.company_name||"",
-    period_from:start, period_to:end, features, risk_score:sc, risk_band:riskBand(sc),
-    predicted_loss_cost:lossCost(sc,annual_km), total_distance_km:totalDistance,
-    total_trips:totalTrips, netstar_driver_score:safe(r.driver_score||r.DriverScore||0),
-  },200,origin);
-}
-
-addEventListener("fetch", event => { event.respondWith(handle(event.request)); });
-
-async function handle(request) {
-  const url = new URL(request.url);
-  const origin = request.headers.get("Origin")||"*";
-  if (request.method==="OPTIONS") return new Response(null,{status:204,headers:cors(origin)});
-  if (url.pathname==="/health") return json({status:"ok",version:"2.0",upstream:NETSTAR_BASE},200,origin);
-  const apiKey = request.headers.get("x-api-key")||(request.headers.get("Authorization")||"").replace("Bearer ","");
-  if (!apiKey) return err("Missing x-api-key header",401,origin);
-  try {
-    const p = url.pathname.replace(/\/$/,"");
-    if (p==="/vehicles")     return await handleVehicles(url,apiKey,origin);
-    if (p==="/fleet-scores") return await handleFleetScores(url,apiKey,origin);
-    if (p==="/driver-score") return await handleDriverScore(url,apiKey,origin);
-    if (p==="/health")       return json({status:"ok"},200,origin);
-    return err(`Unknown route: ${p}`,404,origin);
-  } catch(e) {
-    console.error("[netstar-proxy]",e.message);
-    return err(`Upstream error: ${e.message}`,502,origin);
+  if(url.pathname==="/health")return json({status:"ok",version:"5.0"});
+  try{
+    var p=url.pathname.replace(/\/$/,"");
+    if(p==="/vehicles")    return await handleVehicles();
+    if(p==="/fleet-scores")return await handleFleetScores(url);
+    if(p==="/driver-score")return await handleDriverScore(url);
+    if(p==="/test")        return await handleTest(url);
+    return err("Unknown route: "+p,404);
+  }catch(e){
+    return err("Upstream error: "+e.message,502);
   }
 }
