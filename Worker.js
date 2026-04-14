@@ -84,22 +84,26 @@ async function handleDriverScore(url){
   var start=toNetstar(url.searchParams.get("start_date"))||DATE_FROM;
   var end=toNetstar(url.searchParams.get("end_date"),true)||DATE_TO;
   if(!imei)throw new Error("imei parameter required");
+
+  // get vehicle info from UBI
   var vlist=await getVehicleList();
   var vinfo=null;
-  for(var vi=0;vi<vlist.length;vi++){if(vlist[vi].imei===imei){vinfo=vlist[vi];break;}}
+  for(var vi=0;vi<vlist.length;vi++){
+    if(vlist[vi].imei===imei){vinfo=vlist[vi];break;}
+  }
+
+  // get driver performance — just use first record since API only returns authorised vehicles
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driver data for this period.");
+
+  // use first record — API only returns data for authorised IMEIs
   var r=list[0];
-  if(vinfo&&vinfo.driver_name&&vinfo.driver_name!=="Unknown"){
-    for(var i=0;i<list.length;i++){
-      if((list[i].driver_name||"").toLowerCase()===(vinfo.driver_name||"").toLowerCase()){r=list[i];break;}
-    }
-  }
+
   var scored=calcRisk(r);
   return json({
     imei:imei,
-    driver_name:r.driver_name||r.driver||(vinfo&&vinfo.driver_name)||"Unknown",
-    registration:(vinfo&&vinfo.registration)||r.object||r.vehicle_no||imei,
+    driver_name:r.driver_name||r.driver||"Unknown",
+    registration:(vinfo&&vinfo.registration)||imei,
     make:(vinfo&&vinfo.make)||"",
     model:(vinfo&&vinfo.model)||"",
     company:r.company_name||r.branch_name||COMPANY,
@@ -124,14 +128,13 @@ async function handleFleetScores(url){
   var vlist=await getVehicleList();
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driver data for this period.");
-  var scored=list.map(function(r){
+
+  var scored=list.map(function(r,idx){
     var s=calcRisk(r);
     var driverName=r.driver_name||r.driver||"Unknown";
-    var matchedVehicle=null;
-    for(var i=0;i<vlist.length;i++){
-      if((vlist[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){matchedVehicle=vlist[i];break;}
-    }
-    var imei=matchedVehicle?matchedVehicle.imei:(vlist.length>0?vlist[0].imei:"");
+    // match vehicle by index since API returns one record per authorised vehicle
+    var matchedVehicle=vlist[idx]||vlist[0]||null;
+    var imei=matchedVehicle?matchedVehicle.imei:"";
     var registration=matchedVehicle?matchedVehicle.registration:(r.object||r.vehicle_no||"");
     return{
       imei:imei,id:imei,
@@ -150,6 +153,8 @@ async function handleFleetScores(url){
       running_time:r.total_running_duration||"N/A"
     };
   });
+
+  // add unscored vehicles
   var scoredImeis=scored.map(function(s){return s.imei;});
   vlist.forEach(function(v){
     if(scoredImeis.indexOf(v.imei)<0){
@@ -165,11 +170,13 @@ async function handleFleetScores(url){
       });
     }
   });
+
   scored.sort(function(a,b){
     if(a.risk_score===null)return 1;
     if(b.risk_score===null)return -1;
     return b.risk_score-a.risk_score;
   });
+
   return json({vehicles:scored,total:scored.length,period_from:start,period_to:end});
 }
 
@@ -216,14 +223,14 @@ async function handle(request){
     var roi=await fetch(GITHUB_RAW+"/roi.html").then(function(r){return r.text();});
     return new Response(roi,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
-  if(url.pathname==="/health")return json({status:"ok",version:"5.3"});
+  if(url.pathname==="/health")return json({status:"ok",version:"5.4"});
   try{
     var p=url.pathname.replace(/\/$/,"");
-    if(p==="/vehicles")       return await handleVehicles();
-    if(p==="/fleet-scores")   return await handleFleetScores(url);
-    if(p==="/driver-score")   return await handleDriverScore(url);
-    if(p==="/object-status")  return await handleObjectStatus(url);
-    if(p==="/test")           return await handleTest(url);
+    if(p==="/vehicles")      return await handleVehicles();
+    if(p==="/fleet-scores")  return await handleFleetScores(url);
+    if(p==="/driver-score")  return await handleDriverScore(url);
+    if(p==="/object-status") return await handleObjectStatus(url);
+    if(p==="/test")          return await handleTest(url);
     return err("Unknown route: "+p,404);
   }catch(e){
     return err("Upstream error: "+e.message,502);
