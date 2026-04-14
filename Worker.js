@@ -77,7 +77,7 @@ async function handle(request){
     var roi=await fetch(GITHUB_RAW+"/roi.html").then(function(r){return r.text();});
     return new Response(roi,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
-  if(url.pathname==="/health")return json({status:"ok",version:"5.1"});
+  if(url.pathname==="/health")return json({status:"ok",version:"5.2"});
   try{
     var p=url.pathname.replace(/\/$/,"");
     if(p==="/vehicles")    return await handleVehicles();
