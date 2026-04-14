@@ -84,7 +84,11 @@ async function handle(request){
     if(p==="/fleet-scores")return await handleFleetScores(url);
     if(p==="/driver-score")return await handleDriverScore(url);
     if(p==="/test")        return await handleTest(url);
-    return err("Unknown route: "+p,404);
+    if(p==="/test-ubi") {
+  var res=await fetch("https://ubi-api.netstaraus.com.au/vehicle/vehicles",{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});
+  var text=await res.text();
+  return json({status:res.status,body:text.slice(0,1000)});
+}return err("Unknown route: "+p,404);
   }catch(e){
     return err("Upstream error: "+e.message,502);
   }
