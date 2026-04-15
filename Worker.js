@@ -154,8 +154,13 @@ async function handleDriverLookup(url){
   var driverName=os?os.driver||"Unknown":(vinfo&&vinfo.driver_name)||"Unknown";
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driving data available for this period.");
-  var r=list[0];
-  if(driverName&&driverName!=="Unknown"){for(var i=0;i<list.length;i++){if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}}}
+ var r=null;
+if(driverName&&driverName!=="Unknown"){
+  for(var i=0;i<list.length;i++){
+    if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}
+  }
+}
+if(!r)throw new Error("No driving data found for "+driverName+" in this period. Please check back later.");
   var scored=calcRisk(r);
   return json({imei:imei,driver_name:driverName,registration:(vinfo&&vinfo.registration)||imei,make:(vinfo&&vinfo.make)||"",model:(vinfo&&vinfo.model)||"",period_from:start,period_to:end,features:scored.features,risk_score:scored.risk_score,risk_band:riskBand(scored.risk_score),predicted_loss_cost:lossCost(scored.risk_score,annual_km),total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A",avg_speed:safe(r.avg_speed||0),max_speed:safe(r.max_speed||0)});
 }
