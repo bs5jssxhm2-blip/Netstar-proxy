@@ -120,14 +120,15 @@ function calcSavings(score, basePremium){
   return{basePremium:basePremium,paydPremium:paydPremium,saving:saving,discount:discount,monthly:paydPremium/12};
 }
 
-function getTips(features){
+function getTips(features, score){
   var tips=[];
   var f=features||{};
-  if(safe(f.harsh_breaking)>2)tips.push({icon:'&#128698;',label:'Reduce harsh braking',sub:'You had '+safe(f.harsh_breaking).toFixed(0)+' harsh braking events. Increase following distance and anticipate stops earlier.',impact:'-'+(safe(f.harsh_breaking)*3).toFixed(0)+' risk points',color:'#e8612a'});
-  if(safe(f.over_speed)>2)tips.push({icon:'&#128246;',label:'Watch your speed',sub:'You had '+safe(f.over_speed).toFixed(0)+' speeding events. Staying within limits has the biggest impact on your score.',impact:'-'+(safe(f.over_speed)*3.5).toFixed(0)+' risk points',color:'#e02020'});
-  if(safe(f.harsh_acceleration)>2)tips.push({icon:'&#9889;',label:'Smoother acceleration',sub:'You had '+safe(f.harsh_acceleration).toFixed(0)+' harsh acceleration events. Gradual acceleration saves fuel and improves your score.',impact:'-'+(safe(f.harsh_acceleration)*2.5).toFixed(0)+' risk points',color:'#f5a623'});
-  if(safe(f.harsh_cornering)>2)tips.push({icon:'&#8635;',label:'Gentler cornering',sub:'You had '+safe(f.harsh_cornering).toFixed(0)+' harsh cornering events. Slow down before corners rather than during.',impact:'-'+(safe(f.harsh_cornering)*2).toFixed(0)+' risk points',color:'#f5a623'});
-  if(safe(f.night_drive)>3)tips.push({icon:'&#127762;',label:'Reduce night driving',sub:'Night driving carries higher risk. Where possible avoid driving between 10pm and 5am.',impact:'-'+(safe(f.night_drive)*1.5).toFixed(0)+' risk points',color:'#7899bb'});
+  if(safe(f.harsh_breaking)>0)tips.push({icon:'&#128698;',label:'Reduce harsh braking',sub:'You had '+safe(f.harsh_breaking).toFixed(0)+' harsh braking events. Increase following distance and anticipate stops earlier.',impact:'High impact on score',color:'#e8612a'});
+  if(safe(f.over_speed)>0)tips.push({icon:'&#128246;',label:'Watch your speed',sub:'You had '+safe(f.over_speed).toFixed(0)+' speeding events. Staying within limits has the biggest impact on your score.',impact:'Highest impact on score',color:'#e02020'});
+  if(safe(f.harsh_acceleration)>0)tips.push({icon:'&#9889;',label:'Smoother acceleration',sub:'You had '+safe(f.harsh_acceleration).toFixed(0)+' harsh acceleration events. Gradual acceleration saves fuel and improves your score.',impact:'Medium impact on score',color:'#f5a623'});
+  if(safe(f.harsh_cornering)>0)tips.push({icon:'&#8635;',label:'Gentler cornering',sub:'You had '+safe(f.harsh_cornering).toFixed(0)+' harsh cornering events. Slow down before corners rather than during.',impact:'Medium impact on score',color:'#f5a623'});
+  if(safe(f.night_drive)>0)tips.push({icon:'&#127762;',label:'Reduce night driving',sub:'Night driving carries higher risk. Where possible avoid driving between 10pm and 5am.',impact:'Low impact on score',color:'#7899bb'});
+  if(score>=60&&tips.length===0)tips.push({icon:'&#128269;',label:'Drive more to improve accuracy',sub:'Your score is based on a short trip sample. More driving data will give a more accurate score.',impact:'Score based on limited data',color:'#f5a623'});
   if(tips.length===0)tips.push({icon:'&#127942;',label:'Keep it up',sub:'Your driving behaviour is excellent. Maintain these habits to keep your premium low.',impact:'Score: Excellent',color:'#00e5a0'});
   return tips;
 }
