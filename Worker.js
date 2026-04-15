@@ -7,6 +7,13 @@ const DATE_FROM = "07-04-2026 00:00:01";
 const DATE_TO = "13-04-2026 23:59:59";
 const GITHUB_RAW = "https://raw.githubusercontent.com/bs5jssxhm2-blip/Netstar-proxy/main";
 
+// Token to IMEI mapping — insurer adds entries here per client
+const DRIVER_TOKENS = {
+  "shaun-demo": "863719065635311",
+  "sholto-demo": "860896051685469",
+  "atthakan-demo": "861059061058628"
+};
+
 function cors(){return{"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type,x-api-key,Authorization","Access-Control-Max-Age":"86400"};}
 function json(data,status){status=status||200;return new Response(JSON.stringify(data),{status:status,headers:{"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}});}
 function err(msg,status){return json({error:msg},status||400);}
@@ -51,78 +58,34 @@ async function getObjectStatus(imei){
   var res=await fetch(NETSTAR_BASE+"/external/reports/object-status?imei="+imei,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});
   var text=await res.text();
   if(!res.ok)return null;
-  try{
-    var data=JSON.parse(text);
-    var list=Array.isArray(data)?data:(data.data||[]);
-    return list.length>0?list[0]:null;
-  }catch(e){return null;}
+  try{var data=JSON.parse(text);var list=Array.isArray(data)?data:(data.data||[]);return list.length>0?list[0]:null;}catch(e){return null;}
 }
 
 async function getVehicleList(){
   var data=await ubiGET("/vehicle/vehicles");
   var list=Array.isArray(data)?data:[];
   return list.map(function(v){
-    return{
-      imei:String(v.Imei||""),
-      id:String(v.Imei||""),
-      registration:v.Registration||String(v.Imei||""),
-      driver_name:v.DriverName||"Unknown",
-      make:v.Make||"",
-      model:v.Model||"",
-      company:v.Client||COMPANY,
-      location:v.Branch||LOCATION,
-      status:v.Status||"",
-      ubi_id:v.Id||""
-    };
+    return{imei:String(v.Imei||""),id:String(v.Imei||""),registration:v.Registration||String(v.Imei||""),driver_name:v.DriverName||"Unknown",make:v.Make||"",model:v.Model||"",company:v.Client||COMPANY,location:v.Branch||LOCATION,status:v.Status||"",ubi_id:v.Id||""};
   });
 }
 
 async function handleVehicles(){
   var vlist=await getVehicleList();
-  // enrich each vehicle with live object status
   var enriched=await Promise.all(vlist.map(async function(v){
     try{
       var os=await getObjectStatus(v.imei);
-      if(os){
-        return Object.assign({},v,{
-          driver_name:os.driver||v.driver_name||"Unknown",
-          speed:os.speed||"0",
-          ignition:os.ignition_status||"Unknown",
-          status_text:os.status_hidden||"Unknown",
-          last_seen:os.last_data||"",
-          location_address:os.location||"",
-          coordinates:os.coordinates||"",
-          vehicle_mode:os.vehicle_mode||"",
-          battery:os.battery_percentage||"",
-          object_name:os["0bject_name"]||os.object_name||""
-        });
-      }
+      if(os){return Object.assign({},v,{driver_name:os.driver||v.driver_name||"Unknown",speed:os.speed||"0",ignition:os.ignition_status||"Unknown",status_text:os.status_hidden||"Unknown",last_seen:os.last_data||"",location_address:os.location||"",coordinates:os.coordinates||"",vehicle_mode:os.vehicle_mode||"",battery:os.battery_percentage||""});}
     }catch(e){}
     return v;
   }));
   return json({vehicles:enriched,total:enriched.length});
 }
 
-async function handleObjectStatusAll(url){
+async function handleObjectStatusAll(){
   var vlist=await getVehicleList();
   var statuses=await Promise.all(vlist.map(async function(v){
     var os=await getObjectStatus(v.imei);
-    return{
-      imei:v.imei,
-      registration:v.registration,
-      make:v.make,
-      model:v.model,
-      driver:os?os.driver||"Unknown":"Unknown",
-      speed:os?os.speed||"0":"0",
-      ignition:os?os.ignition_status||"Unknown":"Unknown",
-      status:os?os.status_hidden||"Unknown":"Unknown",
-      last_seen:os?os.last_data||"":"",
-      location:os?os.location||"":"",
-      coordinates:os?os.coordinates||"":"",
-      vehicle_mode:os?os.vehicle_mode||"":"",
-      battery:os?os.battery_percentage||"":"",
-      gsm:os?os.gsm||"":""
-    };
+    return{imei:v.imei,registration:v.registration,make:v.make,model:v.model,driver:os?os.driver||"Unknown":"Unknown",speed:os?os.speed||"0":"0",ignition:os?os.ignition_status||"Unknown":"Unknown",status:os?os.status_hidden||"Unknown":"Unknown",last_seen:os?os.last_data||"":"",location:os?os.location||"":"",coordinates:os?os.coordinates||"":"",vehicle_mode:os?os.vehicle_mode||"":"",battery:os?os.battery_percentage||"":"",gsm:os?os.gsm||"":""};
   }));
   return json({vehicles:statuses,total:statuses.length,updated:new Date().toISOString()});
 }
@@ -133,150 +96,68 @@ async function handleDriverScore(url){
   var start=toNetstar(url.searchParams.get("start_date"))||DATE_FROM;
   var end=toNetstar(url.searchParams.get("end_date"),true)||DATE_TO;
   if(!imei)throw new Error("imei parameter required");
-
-  // get live object status for driver name and vehicle info
   var os=await getObjectStatus(imei);
   var vlist=await getVehicleList();
   var vinfo=null;
   for(var vi=0;vi<vlist.length;vi++){if(vlist[vi].imei===imei){vinfo=vlist[vi];break;}}
-
   var driverName=os?os.driver||"Unknown":(vinfo&&vinfo.driver_name)||"Unknown";
-
-  // get driver performance — match by driver name from object status
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driver data for this period.");
-
   var r=list[0];
-  if(driverName&&driverName!=="Unknown"){
-    for(var i=0;i<list.length;i++){
-      if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}
-    }
-  }
-
+  if(driverName&&driverName!=="Unknown"){for(var i=0;i<list.length;i++){if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}}}
   var scored=calcRisk(r);
-  return json({
-    imei:imei,
-    driver_name:driverName,
-    registration:(vinfo&&vinfo.registration)||imei,
-    make:(vinfo&&vinfo.make)||"",
-    model:(vinfo&&vinfo.model)||"",
-    company:r.company_name||r.branch_name||COMPANY,
-    period_from:start,period_to:end,
-    features:scored.features,
-    risk_score:scored.risk_score,
-    risk_band:riskBand(scored.risk_score),
-    predicted_loss_cost:lossCost(scored.risk_score,annual_km),
-    total_distance_km:safe(r.total_running_km||0),
-    running_time:r.total_running_duration||"N/A",
-    avg_speed:safe(r.avg_speed||0),
-    max_speed:safe(r.max_speed||0),
-    speed_live:os?os.speed||"0":"0",
-    ignition:os?os.ignition_status||"Unknown":"Unknown",
-    location_address:os?os.location||"":"",
-    coordinates:os?os.coordinates||"":"",
-    last_seen:os?os.last_data||"":"",
-    netstar_driver_score:0
-  });
+  return json({imei:imei,driver_name:driverName,registration:(vinfo&&vinfo.registration)||imei,make:(vinfo&&vinfo.make)||"",model:(vinfo&&vinfo.model)||"",company:r.company_name||r.branch_name||COMPANY,period_from:start,period_to:end,features:scored.features,risk_score:scored.risk_score,risk_band:riskBand(scored.risk_score),predicted_loss_cost:lossCost(scored.risk_score,annual_km),total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A",avg_speed:safe(r.avg_speed||0),max_speed:safe(r.max_speed||0),speed_live:os?os.speed||"0":"0",ignition:os?os.ignition_status||"Unknown":"Unknown",location_address:os?os.location||"":"",coordinates:os?os.coordinates||"":"",last_seen:os?os.last_data||"":"",netstar_driver_score:0});
 }
 
 async function handleFleetScores(url){
   var annual_km=parseInt(url.searchParams.get("annual_km")||"15000");
   var start=toNetstar(url.searchParams.get("start_date"))||DATE_FROM;
   var end=toNetstar(url.searchParams.get("end_date"),true)||DATE_TO;
-
   var vlist=await getVehicleList();
-
-  // get object status for all vehicles to get current driver names
   var osMap={};
-  await Promise.all(vlist.map(async function(v){
-    try{
-      var os=await getObjectStatus(v.imei);
-      if(os)osMap[v.imei]=os;
-    }catch(e){}
-  }));
-
-  // update vehicle driver names from object status
-  vlist=vlist.map(function(v){
-    var os=osMap[v.imei];
-    return Object.assign({},v,{
-      driver_name:os?os.driver||v.driver_name||"Unknown":v.driver_name||"Unknown",
-      speed:os?os.speed||"0":"0",
-      ignition:os?os.ignition_status||"Unknown":"Unknown",
-      location_address:os?os.location||"":"",
-      coordinates:os?os.coordinates||"":""
-    });
-  });
-
+  await Promise.all(vlist.map(async function(v){try{var os=await getObjectStatus(v.imei);if(os)osMap[v.imei]=os;}catch(e){}}));
+  vlist=vlist.map(function(v){var os=osMap[v.imei];return Object.assign({},v,{driver_name:os?os.driver||v.driver_name||"Unknown":v.driver_name||"Unknown",speed:os?os.speed||"0":"0",ignition:os?os.ignition_status||"Unknown":"Unknown",location_address:os?os.location||"":"",coordinates:os?os.coordinates||"":""});});
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driver data for this period.");
-
   var scored=list.map(function(r){
     var s=calcRisk(r);
     var driverName=r.driver_name||r.driver||"Unknown";
-    // match vehicle by driver name from object status
     var matchedVehicle=null;
-    for(var i=0;i<vlist.length;i++){
-      if((vlist[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){
-        matchedVehicle=vlist[i];break;
-      }
-    }
-    // fallback to first unmatched vehicle
-    if(!matchedVehicle){
-      for(var j=0;j<vlist.length;j++){
-        if(!vlist[j]._matched){matchedVehicle=vlist[j];vlist[j]._matched=true;break;}
-      }
-    }
+    for(var i=0;i<vlist.length;i++){if((vlist[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){matchedVehicle=vlist[i];break;}}
+    if(!matchedVehicle){for(var j=0;j<vlist.length;j++){if(!vlist[j]._matched){matchedVehicle=vlist[j];vlist[j]._matched=true;break;}}}
     var imei=matchedVehicle?matchedVehicle.imei:"";
-    return{
-      imei:imei,id:imei,
-      registration:matchedVehicle?matchedVehicle.registration:"",
-      driver_name:driverName,
-      make:matchedVehicle?matchedVehicle.make:"",
-      model:matchedVehicle?matchedVehicle.model:"",
-      company:r.company_name||r.branch_name||COMPANY,
-      location:matchedVehicle?matchedVehicle.location:"",
-      speed:matchedVehicle?matchedVehicle.speed||"0":"0",
-      ignition:matchedVehicle?matchedVehicle.ignition||"Unknown":"Unknown",
-      location_address:matchedVehicle?matchedVehicle.location_address||"":"",
-      coordinates:matchedVehicle?matchedVehicle.coordinates||"":"",
-      features:s.features,
-      risk_score:s.risk_score,
-      risk_band:riskBand(s.risk_score),
-      predicted_loss_cost:lossCost(s.risk_score,annual_km),
-      netstar_driver_score:0,
-      total_distance_km:safe(r.total_running_km||0),
-      running_time:r.total_running_duration||"N/A"
-    };
+    return{imei:imei,id:imei,registration:matchedVehicle?matchedVehicle.registration:"",driver_name:driverName,make:matchedVehicle?matchedVehicle.make:"",model:matchedVehicle?matchedVehicle.model:"",company:r.company_name||r.branch_name||COMPANY,location:matchedVehicle?matchedVehicle.location:"",speed:matchedVehicle?matchedVehicle.speed||"0":"0",ignition:matchedVehicle?matchedVehicle.ignition||"Unknown":"Unknown",location_address:matchedVehicle?matchedVehicle.location_address||"":"",coordinates:matchedVehicle?matchedVehicle.coordinates||"":"",features:s.features,risk_score:s.risk_score,risk_band:riskBand(s.risk_score),predicted_loss_cost:lossCost(s.risk_score,annual_km),netstar_driver_score:0,total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A"};
   });
-
-  // add unscored vehicles
   var scoredImeis=scored.map(function(s){return s.imei;});
-  vlist.forEach(function(v){
-    if(scoredImeis.indexOf(v.imei)<0){
-      scored.push({
-        imei:v.imei,id:v.imei,
-        registration:v.registration,
-        driver_name:v.driver_name||"Unknown",
-        make:v.make,model:v.model,
-        company:v.company,location:v.location,
-        speed:v.speed||"0",
-        ignition:v.ignition||"Unknown",
-        location_address:v.location_address||"",
-        coordinates:v.coordinates||"",
-        features:{},risk_score:null,risk_band:null,
-        predicted_loss_cost:null,netstar_driver_score:0,
-        total_distance_km:0,running_time:"N/A"
-      });
-    }
-  });
-
-  scored.sort(function(a,b){
-    if(a.risk_score===null)return 1;
-    if(b.risk_score===null)return -1;
-    return b.risk_score-a.risk_score;
-  });
-
+  vlist.forEach(function(v){if(scoredImeis.indexOf(v.imei)<0){scored.push({imei:v.imei,id:v.imei,registration:v.registration,driver_name:v.driver_name||"Unknown",make:v.make,model:v.model,company:v.company,location:v.location,speed:v.speed||"0",ignition:v.ignition||"Unknown",location_address:v.location_address||"",coordinates:v.coordinates||"",features:{},risk_score:null,risk_band:null,predicted_loss_cost:null,netstar_driver_score:0,total_distance_km:0,running_time:"N/A"});}});
+  scored.sort(function(a,b){if(a.risk_score===null)return 1;if(b.risk_score===null)return -1;return b.risk_score-a.risk_score;});
   return json({vehicles:scored,total:scored.length,period_from:start,period_to:end});
+}
+
+async function handleDriverLookup(url){
+  var token=url.searchParams.get("token")||null;
+  if(!token)throw new Error("Token required.");
+  var imei=DRIVER_TOKENS[token]||null;
+  if(!imei)throw new Error("Invalid or expired link. Please contact your insurer.");
+  var annual_km=15000;
+  var now=new Date();
+  var weekAgo=new Date(now-7*86400000);
+  function pad2(n){return String(n).padStart(2,"0");}
+  function toNS(d){return pad2(d.getDate())+"-"+pad2(d.getMonth()+1)+"-"+d.getFullYear()+" 00:00:01";}
+  function toNSE(d){return pad2(d.getDate())+"-"+pad2(d.getMonth()+1)+"-"+d.getFullYear()+" 23:59:59";}
+  var start=toNS(weekAgo);
+  var end=toNSE(now);
+  var os=await getObjectStatus(imei);
+  var vlist=await getVehicleList();
+  var vinfo=null;
+  for(var vi=0;vi<vlist.length;vi++){if(vlist[vi].imei===imei){vinfo=vlist[vi];break;}}
+  var driverName=os?os.driver||"Unknown":(vinfo&&vinfo.driver_name)||"Unknown";
+  var list=await getDriverPerf(start,end);
+  if(!list.length)throw new Error("No driving data available for this period.");
+  var r=list[0];
+  if(driverName&&driverName!=="Unknown"){for(var i=0;i<list.length;i++){if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}}}
+  var scored=calcRisk(r);
+  return json({imei:imei,driver_name:driverName,registration:(vinfo&&vinfo.registration)||imei,make:(vinfo&&vinfo.make)||"",model:(vinfo&&vinfo.model)||"",period_from:start,period_to:end,features:scored.features,risk_score:scored.risk_score,risk_band:riskBand(scored.risk_score),predicted_loss_cost:lossCost(scored.risk_score,annual_km),total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A",avg_speed:safe(r.avg_speed||0),max_speed:safe(r.max_speed||0)});
 }
 
 async function handleTest(url){
@@ -285,16 +166,9 @@ async function handleTest(url){
   var start=url.searchParams.get("start")||DATE_FROM;
   var end=url.searchParams.get("end")||DATE_TO;
   var res;
-  if(path==="/vehicle/vehicles"){
-    res=await fetch(UBI_BASE+path,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});
-  } else if(path==="/external/reports/object-status"){
-    var q=imei?"?imei="+imei:"";
-    res=await fetch(NETSTAR_BASE+path+q,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});
-  } else {
-    var params=new URLSearchParams({company_names:COMPANY,location_names:LOCATION,start_date_time:start,end_date_time:end});
-    if(imei)params.set("imei",imei);
-    res=await fetch(NETSTAR_BASE+path+"?"+params.toString(),{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});
-  }
+  if(path==="/vehicle/vehicles"){res=await fetch(UBI_BASE+path,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});}
+  else if(path==="/external/reports/object-status"){var q=imei?"?imei="+imei:"";res=await fetch(NETSTAR_BASE+path+q,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});}
+  else{var params=new URLSearchParams({company_names:COMPANY,location_names:LOCATION,start_date_time:start,end_date_time:end});if(imei)params.set("imei",imei);res=await fetch(NETSTAR_BASE+path+"?"+params.toString(),{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});}
   var text=await res.text();
   return json({status:res.status,body:text.slice(0,1000)});
 }
@@ -314,14 +188,19 @@ async function handle(request){
     var roi=await fetch(GITHUB_RAW+"/roi.html").then(function(r){return r.text();});
     return new Response(roi,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
-  if(url.pathname==="/health")return json({status:"ok",version:"5.5"});
+  if(url.pathname==="/driver"){
+    var drv=await fetch(GITHUB_RAW+"/driver.html").then(function(r){return r.text();});
+    return new Response(drv,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
+  }
+  if(url.pathname==="/health")return json({status:"ok",version:"5.6"});
   try{
     var p=url.pathname.replace(/\/$/,"");
-    if(p==="/vehicles")        return await handleVehicles();
-    if(p==="/fleet-scores")    return await handleFleetScores(url);
-    if(p==="/driver-score")    return await handleDriverScore(url);
-    if(p==="/live-status")     return await handleObjectStatusAll(url);
-    if(p==="/test")            return await handleTest(url);
+    if(p==="/vehicles")       return await handleVehicles();
+    if(p==="/fleet-scores")   return await handleFleetScores(url);
+    if(p==="/driver-score")   return await handleDriverScore(url);
+    if(p==="/live-status")    return await handleObjectStatusAll();
+    if(p==="/driver-lookup")  return await handleDriverLookup(url);
+    if(p==="/test")           return await handleTest(url);
     return err("Unknown route: "+p,404);
   }catch(e){
     return err("Upstream error: "+e.message,502);
