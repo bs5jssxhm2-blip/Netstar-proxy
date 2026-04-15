@@ -137,7 +137,7 @@ function render(data){
   var score=data.risk_score||0;
   var band=getBand(score);
   var sav=calcSavings(score);
-  var tips=getTips(data.features);
+  var tips=getTips(data.features, score);
   var f=data.features||{};
 
   document.getElementById('score-badge').textContent=band.label;
