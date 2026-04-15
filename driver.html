@@ -109,15 +109,15 @@ function gaugeHTML(score,color){
 
 function calcSavings(score, basePremium){
   basePremium=basePremium||1800;
-  var discount=0;
-  if(score<20)discount=0.30;
-  else if(score<40)discount=0.15;
-  else if(score<60)discount=0;
-  else if(score<80)discount=-0.20;
-  else discount=-0.35;
-  var paydPremium=basePremium*(1+discount);
+  var loading=0;
+  if(score<20)loading=-0.30;
+  else if(score<40)loading=-0.15;
+  else if(score<60)loading=0;
+  else if(score<80)loading=0.20;
+  else loading=0.35;
+  var paydPremium=basePremium*(1+loading);
   var saving=basePremium-paydPremium;
-  return{basePremium:basePremium,paydPremium:paydPremium,saving:saving,discount:discount,monthly:paydPremium/12};
+  return{basePremium:basePremium,paydPremium:paydPremium,saving:saving,loading:loading,monthly:paydPremium/12};
 }
 
 function getTips(features, score){
