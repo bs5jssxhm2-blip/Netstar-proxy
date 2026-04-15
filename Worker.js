@@ -30,13 +30,6 @@ function calcRisk(r){
 function lossCost(sc,km){km=km||15000;return Math.round(1200*(Math.exp(sc/35)-0.9)*Math.sqrt(km/15000));}
 function riskBand(sc){if(sc<20)return"Excellent";if(sc<40)return"Good";if(sc<60)return"Moderate";if(sc<80)return"High";return"Critical";}
 
-async function netstarPOST(path,body){
-  var res=await fetch(NETSTAR_BASE+path,{method:"POST",headers:{"Content-Type":"application/json","x-api-key":NETSTAR_API_KEY,"Accept":"application/json"},body:JSON.stringify(body)});
-  var text=await res.text();
-  if(!res.ok)throw new Error("Netstar "+res.status+": "+text.slice(0,300));
-  try{return JSON.parse(text);}catch(e){throw new Error("Non-JSON: "+text.slice(0,300));}
-}
-
 async function ubiGET(path){
   var res=await fetch(UBI_BASE+path,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});
   var text=await res.text();
@@ -54,6 +47,17 @@ async function getDriverPerf(start,end){
   return Array.isArray(data)?data:(data.data||data.result||[]);
 }
 
+async function getObjectStatus(imei){
+  var res=await fetch(NETSTAR_BASE+"/external/reports/object-status?imei="+imei,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});
+  var text=await res.text();
+  if(!res.ok)return null;
+  try{
+    var data=JSON.parse(text);
+    var list=Array.isArray(data)?data:(data.data||[]);
+    return list.length>0?list[0]:null;
+  }catch(e){return null;}
+}
+
 async function getVehicleList(){
   var data=await ubiGET("/vehicle/vehicles");
   var list=Array.isArray(data)?data:[];
@@ -61,7 +65,7 @@ async function getVehicleList(){
     return{
       imei:String(v.Imei||""),
       id:String(v.Imei||""),
-      registration:v.Registration||v.VbuNo||String(v.Imei||""),
+      registration:v.Registration||String(v.Imei||""),
       driver_name:v.DriverName||"Unknown",
       make:v.Make||"",
       model:v.Model||"",
@@ -74,8 +78,53 @@ async function getVehicleList(){
 }
 
 async function handleVehicles(){
-  var vehicles=await getVehicleList();
-  return json({vehicles:vehicles,total:vehicles.length});
+  var vlist=await getVehicleList();
+  // enrich each vehicle with live object status
+  var enriched=await Promise.all(vlist.map(async function(v){
+    try{
+      var os=await getObjectStatus(v.imei);
+      if(os){
+        return Object.assign({},v,{
+          driver_name:os.driver||v.driver_name||"Unknown",
+          speed:os.speed||"0",
+          ignition:os.ignition_status||"Unknown",
+          status_text:os.status_hidden||"Unknown",
+          last_seen:os.last_data||"",
+          location_address:os.location||"",
+          coordinates:os.coordinates||"",
+          vehicle_mode:os.vehicle_mode||"",
+          battery:os.battery_percentage||"",
+          object_name:os["0bject_name"]||os.object_name||""
+        });
+      }
+    }catch(e){}
+    return v;
+  }));
+  return json({vehicles:enriched,total:enriched.length});
+}
+
+async function handleObjectStatusAll(url){
+  var vlist=await getVehicleList();
+  var statuses=await Promise.all(vlist.map(async function(v){
+    var os=await getObjectStatus(v.imei);
+    return{
+      imei:v.imei,
+      registration:v.registration,
+      make:v.make,
+      model:v.model,
+      driver:os?os.driver||"Unknown":"Unknown",
+      speed:os?os.speed||"0":"0",
+      ignition:os?os.ignition_status||"Unknown":"Unknown",
+      status:os?os.status_hidden||"Unknown":"Unknown",
+      last_seen:os?os.last_data||"":"",
+      location:os?os.location||"":"",
+      coordinates:os?os.coordinates||"":"",
+      vehicle_mode:os?os.vehicle_mode||"":"",
+      battery:os?os.battery_percentage||"":"",
+      gsm:os?os.gsm||"":""
+    };
+  }));
+  return json({vehicles:statuses,total:statuses.length,updated:new Date().toISOString()});
 }
 
 async function handleDriverScore(url){
@@ -85,24 +134,29 @@ async function handleDriverScore(url){
   var end=toNetstar(url.searchParams.get("end_date"),true)||DATE_TO;
   if(!imei)throw new Error("imei parameter required");
 
-  // get vehicle info from UBI
+  // get live object status for driver name and vehicle info
+  var os=await getObjectStatus(imei);
   var vlist=await getVehicleList();
   var vinfo=null;
-  for(var vi=0;vi<vlist.length;vi++){
-    if(vlist[vi].imei===imei){vinfo=vlist[vi];break;}
-  }
+  for(var vi=0;vi<vlist.length;vi++){if(vlist[vi].imei===imei){vinfo=vlist[vi];break;}}
 
-  // get driver performance — just use first record since API only returns authorised vehicles
+  var driverName=os?os.driver||"Unknown":(vinfo&&vinfo.driver_name)||"Unknown";
+
+  // get driver performance — match by driver name from object status
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driver data for this period.");
 
-  // use first record — API only returns data for authorised IMEIs
   var r=list[0];
+  if(driverName&&driverName!=="Unknown"){
+    for(var i=0;i<list.length;i++){
+      if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}
+    }
+  }
 
   var scored=calcRisk(r);
   return json({
     imei:imei,
-    driver_name:r.driver_name||r.driver||"Unknown",
+    driver_name:driverName,
     registration:(vinfo&&vinfo.registration)||imei,
     make:(vinfo&&vinfo.make)||"",
     model:(vinfo&&vinfo.model)||"",
@@ -116,8 +170,12 @@ async function handleDriverScore(url){
     running_time:r.total_running_duration||"N/A",
     avg_speed:safe(r.avg_speed||0),
     max_speed:safe(r.max_speed||0),
-    netstar_driver_score:0,
-    raw_record:r
+    speed_live:os?os.speed||"0":"0",
+    ignition:os?os.ignition_status||"Unknown":"Unknown",
+    location_address:os?os.location||"":"",
+    coordinates:os?os.coordinates||"":"",
+    last_seen:os?os.last_data||"":"",
+    netstar_driver_score:0
   });
 }
 
@@ -125,25 +183,62 @@ async function handleFleetScores(url){
   var annual_km=parseInt(url.searchParams.get("annual_km")||"15000");
   var start=toNetstar(url.searchParams.get("start_date"))||DATE_FROM;
   var end=toNetstar(url.searchParams.get("end_date"),true)||DATE_TO;
+
   var vlist=await getVehicleList();
+
+  // get object status for all vehicles to get current driver names
+  var osMap={};
+  await Promise.all(vlist.map(async function(v){
+    try{
+      var os=await getObjectStatus(v.imei);
+      if(os)osMap[v.imei]=os;
+    }catch(e){}
+  }));
+
+  // update vehicle driver names from object status
+  vlist=vlist.map(function(v){
+    var os=osMap[v.imei];
+    return Object.assign({},v,{
+      driver_name:os?os.driver||v.driver_name||"Unknown":v.driver_name||"Unknown",
+      speed:os?os.speed||"0":"0",
+      ignition:os?os.ignition_status||"Unknown":"Unknown",
+      location_address:os?os.location||"":"",
+      coordinates:os?os.coordinates||"":""
+    });
+  });
+
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driver data for this period.");
 
-  var scored=list.map(function(r,idx){
+  var scored=list.map(function(r){
     var s=calcRisk(r);
     var driverName=r.driver_name||r.driver||"Unknown";
-    // match vehicle by index since API returns one record per authorised vehicle
-    var matchedVehicle=vlist[idx]||vlist[0]||null;
+    // match vehicle by driver name from object status
+    var matchedVehicle=null;
+    for(var i=0;i<vlist.length;i++){
+      if((vlist[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){
+        matchedVehicle=vlist[i];break;
+      }
+    }
+    // fallback to first unmatched vehicle
+    if(!matchedVehicle){
+      for(var j=0;j<vlist.length;j++){
+        if(!vlist[j]._matched){matchedVehicle=vlist[j];vlist[j]._matched=true;break;}
+      }
+    }
     var imei=matchedVehicle?matchedVehicle.imei:"";
-    var registration=matchedVehicle?matchedVehicle.registration:(r.object||r.vehicle_no||"");
     return{
       imei:imei,id:imei,
-      registration:registration,
+      registration:matchedVehicle?matchedVehicle.registration:"",
       driver_name:driverName,
       make:matchedVehicle?matchedVehicle.make:"",
       model:matchedVehicle?matchedVehicle.model:"",
       company:r.company_name||r.branch_name||COMPANY,
       location:matchedVehicle?matchedVehicle.location:"",
+      speed:matchedVehicle?matchedVehicle.speed||"0":"0",
+      ignition:matchedVehicle?matchedVehicle.ignition||"Unknown":"Unknown",
+      location_address:matchedVehicle?matchedVehicle.location_address||"":"",
+      coordinates:matchedVehicle?matchedVehicle.coordinates||"":"",
       features:s.features,
       risk_score:s.risk_score,
       risk_band:riskBand(s.risk_score),
@@ -164,6 +259,10 @@ async function handleFleetScores(url){
         driver_name:v.driver_name||"Unknown",
         make:v.make,model:v.model,
         company:v.company,location:v.location,
+        speed:v.speed||"0",
+        ignition:v.ignition||"Unknown",
+        location_address:v.location_address||"",
+        coordinates:v.coordinates||"",
         features:{},risk_score:null,risk_band:null,
         predicted_loss_cost:null,netstar_driver_score:0,
         total_distance_km:0,running_time:"N/A"
@@ -178,14 +277,6 @@ async function handleFleetScores(url){
   });
 
   return json({vehicles:scored,total:scored.length,period_from:start,period_to:end});
-}
-
-async function handleObjectStatus(url){
-  var imei=url.searchParams.get("imei")||null;
-  if(!imei)throw new Error("imei parameter required");
-  var res=await fetch(NETSTAR_BASE+"/external/reports/object-status?imei="+imei,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});
-  var text=await res.text();
-  return json({status:res.status,body:text.slice(0,2000)});
 }
 
 async function handleTest(url){
@@ -223,14 +314,14 @@ async function handle(request){
     var roi=await fetch(GITHUB_RAW+"/roi.html").then(function(r){return r.text();});
     return new Response(roi,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
-  if(url.pathname==="/health")return json({status:"ok",version:"5.4"});
+  if(url.pathname==="/health")return json({status:"ok",version:"5.5"});
   try{
     var p=url.pathname.replace(/\/$/,"");
-    if(p==="/vehicles")      return await handleVehicles();
-    if(p==="/fleet-scores")  return await handleFleetScores(url);
-    if(p==="/driver-score")  return await handleDriverScore(url);
-    if(p==="/object-status") return await handleObjectStatus(url);
-    if(p==="/test")          return await handleTest(url);
+    if(p==="/vehicles")        return await handleVehicles();
+    if(p==="/fleet-scores")    return await handleFleetScores(url);
+    if(p==="/driver-score")    return await handleDriverScore(url);
+    if(p==="/live-status")     return await handleObjectStatusAll(url);
+    if(p==="/test")            return await handleTest(url);
     return err("Unknown route: "+p,404);
   }catch(e){
     return err("Upstream error: "+e.message,502);
