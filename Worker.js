@@ -315,7 +315,7 @@ async function handle(request,event){
     if(p==="/driver-score")   return await handleDriverScore(url);
     if(p==="/live-status")    return await handleObjectStatusAll();
     if(p==="/driver-lookup")  return await handleDriverLookup(url);
-    if(p==="/test")           return await handleTest(url);
+    if(p==="/ble/test-location"){var imeis=["780901703168027","780901807230839"].join(",");var locParams=new URLSearchParams({method:"mso.device.location.get",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:msoTokenCache.token||"none",imeis:imeis});var locRes=await fetch(MSO_BASE+"?"+locParams.toString());return json(await locRes.json());}
     if(p==="/ble/raw-devices"){var rdToken="e65e8002bdfcd45be6d3ab4cbc4370be";var targets=["shaunbr@netstaraus.com","Netstar Aus","netstaraus","shaunbr"];var results={};for(var i=0;i<targets.length;i++){var rdParams=new URLSearchParams({method:"mso.user.device.list",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:rdToken,target:targets[i]});var rdRes=await fetch(MSO_BASE+"?"+rdParams.toString());results[targets[i]]=await rdRes.json();}return json(results);}
     // BLE tracker API routes
     if(p==="/ble/api/assets")return await handleBleAssets(env);
