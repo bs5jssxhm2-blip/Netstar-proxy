@@ -13,7 +13,7 @@
   --bg: #0f1117; --bg2: #161921; --bg3: #1e2230; --bg4: #252a3a;
   --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.13);
   --text: #f0f2f7; --text2: #8b90a0; --text3: #555c70;
-  --accent: #3d7fff; --accent2: #1a52d4;
+  --accent: #3d7fff;
   --danger: #ff4757; --danger-bg: rgba(255,71,87,0.12);
   --warn: #ffb800; --warn-bg: rgba(255,184,0,0.1);
   --ok: #00d68f; --ok-bg: rgba(0,214,143,0.1);
@@ -21,45 +21,21 @@
   --radius: 12px; --radius-sm: 8px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 15px; }
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
-.app { display: flex; flex-direction: column; min-height: 100vh; max-width: 480px; margin: 0 auto; position: relative; }
-
-.topbar {
-  position: sticky; top: 0; z-index: 100;
-  background: rgba(15,17,23,0.92); backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--border);
-  padding: 0 16px; height: 56px;
-  display: flex; align-items: center; gap: 12px;
-}
-.topbar-back {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--bg3); border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: var(--text2); transition: all .15s; flex-shrink: 0;
-}
-.topbar-back:hover { background: var(--bg4); color: var(--text); }
+.app { display: flex; flex-direction: column; min-height: 100vh; max-width: 480px; margin: 0 auto; }
+.topbar { position: sticky; top: 0; z-index: 100; background: rgba(15,17,23,0.92); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); padding: 0 16px; height: 56px; display: flex; align-items: center; gap: 12px; }
+.topbar-back { width: 34px; height: 34px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text2); transition: all .15s; flex-shrink: 0; }
 .topbar-back svg { width: 16px; height: 16px; }
 .topbar-title { font-size: 15px; font-weight: 500; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar-actions { display: flex; gap: 8px; }
-.icon-btn {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--bg3); border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: var(--text2); transition: all .15s;
-}
-.icon-btn:hover { background: var(--bg4); color: var(--text); }
+.icon-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text2); transition: all .15s; }
 .icon-btn svg { width: 16px; height: 16px; }
 .icon-btn.spinning svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
 .screen { display: none; flex-direction: column; flex: 1; }
 .screen.active { display: flex; }
-
 .dash-header { padding: 20px 16px 12px; }
 .dash-greeting { font-size: 22px; font-weight: 600; letter-spacing: -0.3px; }
 .dash-sub { font-size: 13px; color: var(--text2); margin-top: 3px; }
-
 .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 16px 16px; }
 .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .stat-num { font-size: 24px; font-weight: 600; font-family: var(--mono); line-height: 1; }
@@ -67,80 +43,48 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .stat-card.danger .stat-num { color: var(--danger); }
 .stat-card.warn .stat-num { color: var(--warn); }
 .stat-card.ok .stat-num { color: var(--ok); }
-
 .filter-row { display: flex; gap: 6px; padding: 0 16px 14px; overflow-x: auto; }
 .filter-row::-webkit-scrollbar { display: none; }
-.chip {
-  flex-shrink: 0; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
-  border: 1px solid var(--border); background: var(--bg2); color: var(--text2);
-  cursor: pointer; transition: all .15s; white-space: nowrap;
-}
+.chip { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; border: 1px solid var(--border); background: var(--bg2); color: var(--text2); cursor: pointer; transition: all .15s; white-space: nowrap; }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.danger-chip.active { background: var(--danger); border-color: var(--danger); color: #fff; }
-
 .section-label { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 16px 8px; }
 .asset-list { padding: 0 16px; display: flex; flex-direction: column; gap: 8px; padding-bottom: 100px; }
-
-.asset-card {
-  background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px;
-  display: flex; align-items: center; gap: 12px;
-  cursor: pointer; transition: all .18s; position: relative; overflow: hidden;
-}
-.asset-card::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
-  width: 3px; border-radius: 3px 0 0 3px;
-}
+.asset-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all .18s; position: relative; overflow: hidden; }
+.asset-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px 0 0 3px; }
 .asset-card.missing::before { background: var(--danger); }
 .asset-card.stale::before { background: var(--warn); }
 .asset-card.ok::before { background: var(--ok); }
-.asset-card:hover { background: var(--bg3); border-color: var(--border2); transform: translateY(-1px); }
-
+.asset-card:hover { background: var(--bg3); border-color: var(--border2); }
 .asset-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 20px; }
 .asset-icon.missing { background: var(--danger-bg); }
-.asset-icon.stale   { background: var(--warn-bg); }
-.asset-icon.ok      { background: var(--ok-bg); }
-
+.asset-icon.stale { background: var(--warn-bg); }
+.asset-icon.ok { background: var(--ok-bg); }
 .asset-info { flex: 1; min-width: 0; }
 .asset-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .asset-meta { font-size: 12px; color: var(--text2); margin-top: 3px; }
-
 .status-badge { flex-shrink: 0; font-size: 11px; font-weight: 500; padding: 4px 10px; border-radius: 20px; }
 .status-badge.missing { background: var(--danger-bg); color: var(--danger); }
-.status-badge.stale   { background: var(--warn-bg);   color: var(--warn); }
-.status-badge.ok      { background: var(--ok-bg);     color: var(--ok); }
-
+.status-badge.stale { background: var(--warn-bg); color: var(--warn); }
+.status-badge.ok { background: var(--ok-bg); color: var(--ok); }
 .chevron { color: var(--text3); flex-shrink: 0; }
 .chevron svg { width: 16px; height: 16px; }
-
-.map-container { height: 240px; position: relative; }
+.map-container { height: 240px; position: relative; flex-shrink: 0; }
 #detail-map { height: 100%; width: 100%; }
-.map-overlay {
-  position: absolute; bottom: 12px; left: 12px;
-  background: rgba(15,17,23,0.88); backdrop-filter: blur(8px);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 8px 12px; font-size: 13px; font-weight: 500; pointer-events: none;
-}
+.map-overlay { position: absolute; bottom: 12px; left: 12px; background: rgba(15,17,23,0.88); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 13px; font-weight: 500; pointer-events: none; z-index: 999; }
 .map-overlay span { color: var(--accent); }
-.map-no-location {
-  height: 100%; background: var(--bg3);
-  display: flex; align-items: center; justify-content: center;
-  flex-direction: column; gap: 8px; color: var(--text3); font-size: 13px;
-}
-
+.map-no-location { height: 100%; background: var(--bg3); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--text3); font-size: 13px; }
 .detail-body { padding: 16px; overflow-y: auto; padding-bottom: 24px; }
 .detail-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
 .detail-name { font-size: 20px; font-weight: 600; letter-spacing: -0.2px; }
 .detail-id { font-size: 12px; color: var(--text3); font-family: var(--mono); margin-top: 3px; }
-
 .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
 .info-cell { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; }
 .info-cell-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; }
 .info-cell-val { font-size: 14px; font-weight: 500; }
 .info-cell-val.danger { color: var(--danger); }
-.info-cell-val.warn   { color: var(--warn); }
-.info-cell-val.ok     { color: var(--ok); }
-
+.info-cell-val.warn { color: var(--warn); }
+.info-cell-val.ok { color: var(--ok); }
 .timeline { margin-bottom: 16px; }
 .timeline-title { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
 .timeline-item { display: flex; gap: 10px; margin-bottom: 10px; }
@@ -148,17 +92,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .timeline-dot.latest { background: var(--accent); box-shadow: 0 0 0 3px rgba(61,127,255,0.2); }
 .timeline-text { font-size: 13px; color: var(--text2); }
 .timeline-time { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
-
 .action-row { display: flex; gap: 8px; }
 .btn { flex: 1; padding: 13px; border-radius: var(--radius); font-size: 14px; font-weight: 500; font-family: var(--font); border: none; cursor: pointer; transition: all .15s; }
 .btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { background: #5590ff; }
 .btn-primary:active { transform: scale(0.98); }
 .btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border2); }
-.btn-secondary:hover { background: var(--bg4); }
-
 .recovery-body { flex: 1; display: flex; flex-direction: column; padding: 16px; gap: 16px; overflow-y: auto; padding-bottom: 24px; }
-.proximity-ring { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 0; position: relative; }
+.proximity-ring { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 0; }
 .ring-outer { width: 200px; height: 200px; border-radius: 50%; border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; position: relative; }
 .ring-mid { width: 150px; height: 150px; border-radius: 50%; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
 .ring-inner { width: 100px; height: 100px; border-radius: 50%; background: var(--bg3); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; }
@@ -166,7 +106,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .ring-unit { font-size: 11px; color: var(--text3); }
 .ring-pulse { position: absolute; inset: -8px; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; animation: pulse-ring 2s ease-out infinite; }
 @keyframes pulse-ring { 0% { transform: scale(0.9); opacity: 0.6; } 100% { transform: scale(1.1); opacity: 0; } }
-
 .signal-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
 .signal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .signal-label { font-size: 13px; color: var(--text2); }
@@ -180,75 +119,50 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .signal-bar-fill.medium { background: var(--warn); }
 .signal-bar-fill.weak { background: var(--danger); }
 .signal-hint { font-size: 12px; color: var(--text3); margin-top: 8px; }
-
 .recovery-tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .tool-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; transition: all .15s; }
-.tool-btn:hover { background: var(--bg3); border-color: var(--border2); }
 .tool-btn:active { transform: scale(0.97); }
 .tool-btn svg { width: 20px; height: 20px; color: var(--text2); }
 .tool-btn span { font-size: 12px; color: var(--text2); text-align: center; }
-
 .compass-hint { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: flex; align-items: center; gap: 12px; }
-.compass-icon { font-size: 24px; }
 .compass-text { font-size: 13px; color: var(--text2); line-height: 1.5; }
-
 .jobs-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; padding-bottom: 100px; }
 .job-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
 .job-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .job-name { font-size: 14px; font-weight: 500; }
 .job-status { font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 20px; }
-.job-status.active { background: var(--accent); color: #fff; }
-.job-status.open   { background: var(--warn-bg); color: var(--warn); }
-.job-status.done   { background: var(--ok-bg);   color: var(--ok); }
+.job-status.open { background: var(--warn-bg); color: var(--warn); }
+.job-status.done { background: var(--ok-bg); color: var(--ok); }
 .job-detail { font-size: 12px; color: var(--text2); line-height: 1.6; }
-.job-assignees { display: flex; gap: 6px; margin-top: 10px; }
-.avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--bg4); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; color: var(--text2); }
-
-.bottom-nav {
-  position: sticky; bottom: 0; z-index: 100;
-  background: rgba(15,17,23,0.95); backdrop-filter: blur(16px);
-  border-top: 1px solid var(--border);
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  padding: 6px 0 max(6px, env(safe-area-inset-bottom));
-}
-.nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; cursor: pointer; transition: all .15s; color: var(--text3); }
+.bottom-nav { position: sticky; bottom: 0; z-index: 100; background: rgba(15,17,23,0.95); backdrop-filter: blur(16px); border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 0 max(6px, env(safe-area-inset-bottom)); }
+.nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; cursor: pointer; color: var(--text3); }
 .nav-item.active { color: var(--accent); }
 .nav-item svg { width: 20px; height: 20px; }
 .nav-item span { font-size: 10px; font-weight: 500; }
 .nav-badge { position: relative; display: inline-block; }
-.nav-badge-dot { position: absolute; top: -2px; right: -6px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); border: 1.5px solid var(--bg); }
-
-/* Loading state */
-.loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 12px; color: var(--text3); font-size: 14px; }
+.nav-badge-dot { position: absolute; top: -2px; right: -6px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); border: 1.5px solid var(--bg); display: none; }
+.loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 12px; color: var(--text3); font-size: 14px; min-height: 200px; }
 .loading-dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: dot-pulse 1.2s ease-in-out infinite; margin: 0 2px; }
 .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
 .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes dot-pulse { 0%,80%,100% { opacity: 0.2; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
-
-.error-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 12px; color: var(--text3); font-size: 14px; padding: 24px; text-align: center; }
-.error-state .error-icon { font-size: 32px; }
-.error-state p { color: var(--text2); }
-.error-state small { font-family: var(--mono); font-size: 11px; color: var(--text3); }
-
+.error-state { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 12px; color: var(--text3); font-size: 14px; padding: 24px; text-align: center; min-height: 200px; }
+.error-icon { font-size: 32px; }
 .leaflet-container { background: #1a1f2e; }
 .leaflet-tile { filter: brightness(0.7) saturate(0.6); }
 .custom-pin { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
 .custom-pin.missing { background: var(--danger); }
-.custom-pin.stale   { background: var(--warn); }
-.custom-pin.ok      { background: var(--ok); }
-.custom-pin.me      { background: var(--accent); }
-
-.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(16px); background: var(--bg4); border: 1px solid var(--border2); border-radius: var(--radius); padding: 10px 16px; font-size: 13px; font-weight: 500; opacity: 0; transition: all .2s; z-index: 999; white-space: nowrap; pointer-events: none; }
+.custom-pin.stale { background: var(--warn); }
+.custom-pin.ok { background: var(--ok); }
+.custom-pin.me { background: var(--accent); }
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(16px); background: var(--bg4); border: 1px solid var(--border2); border-radius: var(--radius); padding: 10px 16px; font-size: 13px; font-weight: 500; opacity: 0; transition: all .2s; z-index: 9999; white-space: nowrap; pointer-events: none; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
 .leaflet-control-zoom a { background: var(--bg3) !important; color: var(--text) !important; border-color: var(--border2) !important; }
 .leaflet-control-attribution { background: rgba(15,17,23,0.7) !important; color: var(--text3) !important; }
-.leaflet-control-attribution a { color: var(--text3) !important; }
 </style>
 </head>
 <body>
 <div class="app">
-
   <div class="topbar" id="topbar">
     <div class="topbar-back" id="topbar-back" onclick="goBack()" style="display:none">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
@@ -260,8 +174,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
       </div>
     </div>
   </div>
-
-  <!-- DASHBOARD -->
   <div class="screen active" id="screen-dashboard">
     <div class="dash-header">
       <div class="dash-greeting">Fleet status</div>
@@ -273,21 +185,16 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
       <div class="stat-card ok"><div class="stat-num" id="stat-ok">—</div><div class="stat-label">In range</div></div>
     </div>
     <div class="filter-row">
-      <div class="chip active" onclick="filterAssets('all', this)">All</div>
-      <div class="chip danger-chip" onclick="filterAssets('missing', this)">Missing</div>
-      <div class="chip" onclick="filterAssets('stale', this)">Stale</div>
-      <div class="chip" onclick="filterAssets('ok', this)">In range</div>
+      <div class="chip active" onclick="filterAssets('all',this)">All</div>
+      <div class="chip danger-chip" onclick="filterAssets('missing',this)">Missing</div>
+      <div class="chip" onclick="filterAssets('stale',this)">Stale</div>
+      <div class="chip" onclick="filterAssets('ok',this)">In range</div>
     </div>
     <div class="section-label" id="list-section-label">ASSETS</div>
     <div id="dash-content">
-      <div class="loading-state">
-        <div class="loading-dots"><span></span><span></span><span></span></div>
-        <div>Loading fleet data…</div>
-      </div>
+      <div class="loading-state"><div class="loading-dots"><span></span><span></span><span></span></div><div>Loading fleet data…</div></div>
     </div>
   </div>
-
-  <!-- DETAIL -->
   <div class="screen" id="screen-detail">
     <div class="map-container" id="map-container">
       <div id="detail-map"></div>
@@ -304,8 +211,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
       <div class="info-grid">
         <div class="info-cell"><div class="info-cell-label">Last seen</div><div class="info-cell-val" id="detail-lastseen">—</div></div>
         <div class="info-cell"><div class="info-cell-label">Battery</div><div class="info-cell-val" id="detail-battery">—</div></div>
-        <div class="info-cell"><div class="info-cell-label">Asset type</div><div class="info-cell-val" id="detail-type">—</div></div>
-        <div class="info-cell"><div class="info-cell-label">Speed</div><div class="info-cell-val" id="detail-speed">—</div></div>
+        <div class="info-cell"><div class="info-cell-label">Device type</div><div class="info-cell-val" id="detail-type">—</div></div>
+        <div class="info-cell"><div class="info-cell-label">Group</div><div class="info-cell-val" id="detail-group" style="font-size:13px">—</div></div>
       </div>
       <div class="timeline">
         <div class="timeline-title">Last known position</div>
@@ -317,8 +224,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
       </div>
     </div>
   </div>
-
-  <!-- RECOVERY -->
   <div class="screen" id="screen-recovery">
     <div class="recovery-body">
       <div class="proximity-ring">
@@ -355,23 +260,18 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
         </div>
       </div>
       <div class="compass-hint">
-        <div class="compass-icon">🧭</div>
-        <div class="compass-text">Move toward <strong id="rec-direction">the last known location</strong> — signal will strengthen as you close in</div>
+        <div style="font-size:24px">🧭</div>
+        <div class="compass-text">Move toward <strong id="rec-direction">the last known location</strong> — signal strengthens as you close in</div>
       </div>
       <button class="btn btn-primary" onclick="markRecovered()">Mark as recovered</button>
     </div>
   </div>
-
-  <!-- JOBS -->
   <div class="screen" id="screen-jobs">
-    <div style="padding:16px 16px 8px; font-size:22px; font-weight:600; letter-spacing:-0.3px">Active jobs</div>
+    <div style="padding:16px 16px 8px;font-size:22px;font-weight:600;letter-spacing:-0.3px">Active jobs</div>
     <div class="jobs-body" id="jobs-list">
-      <div class="loading-state" style="padding:40px 0">
-        <div class="loading-dots"><span></span><span></span><span></span></div>
-      </div>
+      <div class="loading-state"><div class="loading-dots"><span></span><span></span><span></span></div></div>
     </div>
   </div>
-
   <div class="bottom-nav">
     <div class="nav-item active" id="nav-dashboard" onclick="showScreen('dashboard')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -384,412 +284,41 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
     <div class="nav-item" id="nav-jobs" onclick="showScreen('jobs')">
       <div class="nav-badge">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <div class="nav-badge-dot" id="jobs-badge" style="display:none"></div>
+        <div class="nav-badge-dot" id="jobs-badge"></div>
       </div>
       <span>Jobs</span>
     </div>
-    <div class="nav-item" id="nav-settings" onclick="showToast('Settings coming soon')">
+    <div class="nav-item" onclick="showToast('Settings coming soon')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span>Settings</span>
     </div>
   </div>
 </div>
-
 <div class="toast" id="toast"></div>
-
 <script>
-// ---- CONFIG ----
-// In production this is served FROM the Worker, so relative URLs work.
-// For local dev, set this to your Worker URL.
-const API_BASE = '';
-
-// ---- STATE ----
-let allAssets = [];
-let currentAsset = null;
-let currentFilter = 'all';
-let detailMap = null;
-let recoveryInterval = null;
-let userLocation = null;
-
-// ---- INIT ----
-document.addEventListener('DOMContentLoaded', () => {
-  updateDashTime();
-  loadAssets();
-  loadJobs();
-  setInterval(updateDashTime, 30000);
-  // Try to get user's location for distance calcs
-  if (navigator.geolocation) {
-    navigator.geolocation.watchPosition(pos => {
-      userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    }, null, { enableHighAccuracy: true, maximumAge: 30000 });
-  }
-});
-
-function updateDashTime() {
-  const now = new Date();
-  document.getElementById('dash-time').textContent =
-    `Updated ${now.toLocaleTimeString('en-AU', {hour:'2-digit', minute:'2-digit'})} · ${now.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'})}`;
-}
-
-// ---- LOAD ASSETS ----
-async function loadAssets() {
-  showDashContent('loading');
-  try {
-    const res = await fetch(`${API_BASE}/ble/api/assets`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    allAssets = data.assets || [];
-    updateStats(data.stats || {});
-    updateFilterChips();
-    renderAssets(currentFilter);
-    updateJobsBadge();
-  } catch (e) {
-    showDashContent('error', e.message);
-  }
-}
-
-function showDashContent(state, msg) {
-  const el = document.getElementById('dash-content');
-  if (state === 'loading') {
-    el.innerHTML = `<div class="loading-state"><div class="loading-dots"><span></span><span></span><span></span></div><div>Loading fleet data…</div></div>`;
-  } else if (state === 'error') {
-    el.innerHTML = `<div class="error-state"><div class="error-icon">⚠️</div><p>Could not load fleet data</p><small>${msg || ''}</small><button class="btn btn-secondary" style="max-width:160px;margin-top:8px" onclick="loadAssets()">Retry</button></div>`;
-  } else {
-    el.innerHTML = '';
-    const list = document.createElement('div');
-    list.className = 'asset-list';
-    list.id = 'asset-list';
-    el.appendChild(list);
-  }
-}
-
-function updateStats(stats) {
-  document.getElementById('stat-missing').textContent = stats.missing ?? '—';
-  document.getElementById('stat-stale').textContent   = stats.stale   ?? '—';
-  document.getElementById('stat-ok').textContent      = stats.ok      ?? '—';
-}
-
-function updateFilterChips() {
-  const missing = allAssets.filter(a => a.status === 'missing').length;
-  const stale   = allAssets.filter(a => a.status === 'stale').length;
-  const ok      = allAssets.filter(a => a.status === 'ok').length;
-  const chips   = document.querySelectorAll('.chip');
-  chips[0].textContent = `All (${allAssets.length})`;
-  chips[1].textContent = `Missing (${missing})`;
-  chips[2].textContent = `Stale (${stale})`;
-  chips[3].textContent = `In range (${ok})`;
-}
-
-function renderAssets(filter) {
-  currentFilter = filter;
-  showDashContent('list');
-  const list = document.getElementById('asset-list');
-  if (!list) return;
-  document.getElementById('list-section-label').textContent =
-    filter === 'all' ? 'ALL ASSETS' : filter.toUpperCase() + ' ASSETS';
-  const assets = filter === 'all' ? allAssets : allAssets.filter(a => a.status === filter);
-  if (assets.length === 0) {
-    list.innerHTML = `<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:14px">No assets in this category</div>`;
-    return;
-  }
-  list.innerHTML = assets.map(a => `
-    <div class="asset-card ${a.status}" onclick="openAsset('${a.id}')">
-      <div class="asset-icon ${a.status}">${a.emoji}</div>
-      <div class="asset-info">
-        <div class="asset-name">${a.name}</div>
-        <div class="asset-meta">${a.lastSeen} · ${a.seenBy}</div>
-      </div>
-      <span class="status-badge ${a.status}">${a.status === 'ok' ? 'In range' : a.status.charAt(0).toUpperCase() + a.status.slice(1)}</span>
-      <div class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
-    </div>
-  `).join('');
-}
-
-function filterAssets(filter, el) {
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  renderAssets(filter);
-}
-
-// ---- OPEN ASSET ----
-async function openAsset(id) {
-  currentAsset = allAssets.find(a => a.id === id) || { id, name: id, status: 'stale', emoji: '📦', type: '—', lastSeen: '—', seenBy: '—', bleId: id };
-  showScreen('detail');
-
-  // Populate from cached data first
-  populateDetail(currentAsset);
-
-  // Then fetch fresh detail
-  try {
-    const res = await fetch(`${API_BASE}/ble/api/assets/${id}`);
-    const fresh = await res.json();
-    if (!fresh.error) {
-      currentAsset = { ...currentAsset, ...fresh };
-      populateDetail(currentAsset);
-    }
-  } catch(e) { /* use cached */ }
-}
-
-function populateDetail(asset) {
-  document.getElementById('detail-name').textContent = asset.name || asset.id;
-  document.getElementById('detail-id').textContent = asset.bleId || asset.id;
-  const badge = document.getElementById('detail-badge');
-  badge.textContent = asset.status === 'ok' ? 'In range' : asset.status ? asset.status.charAt(0).toUpperCase() + asset.status.slice(1) : '—';
-  badge.className = 'status-badge ' + (asset.status || 'stale');
-
-  const lsEl = document.getElementById('detail-lastseen');
-  lsEl.textContent = asset.lastSeen || '—';
-  lsEl.className = 'info-cell-val ' + (asset.status === 'missing' ? 'danger' : asset.status === 'stale' ? 'warn' : 'ok');
-
-  document.getElementById('detail-battery').textContent = asset.battery ? asset.battery + '%' : '—';
-  document.getElementById('detail-type').textContent = asset.type || '—';
-  document.getElementById('detail-speed').textContent = asset.speed ? asset.speed + ' km/h' : 'Stationary';
-
-  // Distance from user
-  let distText = '—';
-  if (userLocation && asset.lat && asset.lng) {
-    const d = haversine(userLocation.lat, userLocation.lng, asset.lat, asset.lng);
-    distText = d < 1000 ? Math.round(d) + 'm away' : (d/1000).toFixed(1) + 'km away';
-    document.getElementById('map-dist').textContent = distText;
-    document.getElementById('detail-speed').textContent; // keep
-  } else if (asset.lat && asset.lng) {
-    document.getElementById('map-dist').textContent = 'Location known';
-  } else {
-    document.getElementById('map-dist').textContent = 'No GPS fix';
-  }
-
-  document.getElementById('detail-timeline').innerHTML = `
-    <div class="timeline-item">
-      <div class="timeline-dot latest"></div>
-      <div>
-        <div class="timeline-text">${asset.seenBy || 'Last known position'}</div>
-        <div class="timeline-time">${asset.lastSeen || '—'} · ${asset.rawHbTime || ''}</div>
-      </div>
-    </div>
-    ${asset.lat && asset.lng ? `
-    <div class="timeline-item">
-      <div class="timeline-dot"></div>
-      <div>
-        <div class="timeline-text">GPS: ${parseFloat(asset.lat).toFixed(5)}, ${parseFloat(asset.lng).toFixed(5)}</div>
-        <div class="timeline-time">Last fix</div>
-      </div>
-    </div>` : ''}
-  `;
-
-  const btnRecover = document.getElementById('btn-recover');
-  btnRecover.textContent = asset.status === 'ok' ? 'Ping device' : 'Start recovery';
-
-  // Map
-  setTimeout(() => {
-    if (detailMap) { detailMap.remove(); detailMap = null; }
-    const mapContainer = document.getElementById('map-container');
-
-    if (asset.lat && asset.lng) {
-      mapContainer.innerHTML = '<div id="detail-map"></div><div class="map-overlay">Last known · <span id="map-dist">' + (distText !== '—' ? distText : 'Location known') + '</span></div>';
-      detailMap = L.map('detail-map', { zoomControl: false }).setView([asset.lat, asset.lng], 16);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' }).addTo(detailMap);
-      const assetIcon = L.divIcon({ html: `<div class="custom-pin ${asset.status}">${asset.emoji}</div>`, iconSize:[30,30], iconAnchor:[15,15], className:'' });
-      L.marker([asset.lat, asset.lng], { icon: assetIcon }).addTo(detailMap);
-      if (userLocation) {
-        const meIcon = L.divIcon({ html: `<div class="custom-pin me" style="font-size:10px;font-weight:600">ME</div>`, iconSize:[30,30], iconAnchor:[15,15], className:'' });
-        L.marker([userLocation.lat, userLocation.lng], { icon: meIcon }).addTo(detailMap);
-        L.polyline([[userLocation.lat, userLocation.lng],[asset.lat, asset.lng]], { color:'#3d7fff', dashArray:'6 6', weight:1.5, opacity:0.6 }).addTo(detailMap);
-      }
-    } else {
-      mapContainer.innerHTML = '<div class="map-no-location"><div style="font-size:32px">📡</div><div>No GPS fix available</div><div style="font-size:12px">Location based on last gateway sighting</div></div>';
-    }
-  }, 120);
-}
-
-// ---- RECOVERY ----
-function startRecovery() {
-  if (!currentAsset) return;
-  showScreen('recovery');
-  document.getElementById('rec-dist').textContent = '—';
-
-  if (recoveryInterval) clearInterval(recoveryInterval);
-
-  // If we have real GPS coords, compute real distance
-  if (userLocation && currentAsset.lat && currentAsset.lng) {
-    let dist = haversine(userLocation.lat, userLocation.lng, currentAsset.lat, currentAsset.lng);
-    document.getElementById('rec-dist').textContent = Math.round(dist);
-
-    // Watch position for live updates
-    if (navigator.geolocation) {
-      recoveryInterval = navigator.geolocation.watchPosition(pos => {
-        userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        dist = haversine(userLocation.lat, userLocation.lng, currentAsset.lat, currentAsset.lng);
-        document.getElementById('rec-dist').textContent = Math.round(dist);
-        updateSignalFromDistance(dist);
-        updateDirection(userLocation, currentAsset);
-      }, null, { enableHighAccuracy: true, maximumAge: 5000 });
-    }
-  } else {
-    // Simulate if no GPS
-    simulateRecovery();
-  }
-}
-
-function updateSignalFromDistance(dist) {
-  let rssi, strength, pct, hint;
-  if (dist > 200)      { rssi = -88; strength = 'weak';   pct = 15; hint = 'Move toward the last known location'; }
-  else if (dist > 100) { rssi = -78; strength = 'weak';   pct = 30; hint = 'Signal detected — keep moving'; }
-  else if (dist > 50)  { rssi = -68; strength = 'medium'; pct = 55; hint = 'Getting warmer — you\'re close'; }
-  else if (dist > 20)  { rssi = -58; strength = 'medium'; pct = 72; hint = 'Strong signal — scan the immediate area'; }
-  else                 { rssi = -47; strength = 'strong'; pct = 90; hint = 'Very close — check nearby assets'; }
-  document.getElementById('rec-rssi').textContent = rssi + ' dBm';
-  document.getElementById('rec-rssi').className = 'signal-val ' + strength;
-  const bar = document.getElementById('rec-bar');
-  bar.style.width = pct + '%';
-  bar.className = 'signal-bar-fill ' + strength;
-  document.getElementById('rec-hint').textContent = hint;
-}
-
-function updateDirection(from, to) {
-  const dLng = to.lng - from.lng;
-  const dLat = to.lat - from.lat;
-  const angle = Math.atan2(dLng, dLat) * 180 / Math.PI;
-  const dirs = ['north','north-east','east','south-east','south','south-west','west','north-west'];
-  const dir = dirs[Math.round(((angle % 360) + 360) % 360 / 45) % 8];
-  document.getElementById('rec-direction').textContent = dir;
-}
-
-function simulateRecovery() {
-  let dist = 285, step = 0;
-  function update() {
-    if (dist > 10) dist = Math.max(10, dist - (Math.random() * 18 + 8));
-    document.getElementById('rec-dist').textContent = Math.round(dist);
-    updateSignalFromDistance(dist);
-    step++;
-    if (dist <= 10 && recoveryInterval) { clearInterval(recoveryInterval); recoveryInterval = null; }
-  }
-  update();
-  recoveryInterval = setInterval(update, 2500);
-}
-
-// ---- JOBS (built from missing assets) ----
-function loadJobs() {
-  // Jobs are derived from missing/stale assets + any we inject
-  setTimeout(() => {
-    const jobs = allAssets
-      .filter(a => a.status === 'missing' || a.status === 'stale')
-      .map(a => ({
-        name: `Recover ${a.name}`,
-        status: a.status === 'missing' ? 'open' : 'open',
-        detail: `${a.lastSeen} · ${a.seenBy} · Tap asset to start recovery`,
-        assignees: []
-      }));
-
-    if (jobs.length === 0 && allAssets.length === 0) {
-      document.getElementById('jobs-list').innerHTML = `<div class="loading-state" style="padding:40px 0"><div class="loading-dots"><span></span><span></span><span></span></div></div>`;
-      setTimeout(loadJobs, 2000);
-      return;
-    }
-
-    document.getElementById('jobs-list').innerHTML = jobs.length === 0
-      ? `<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:14px">No open jobs — all assets accounted for ✓</div>`
-      : jobs.map(j => `
-        <div class="job-card">
-          <div class="job-header">
-            <div class="job-name">${j.name}</div>
-            <span class="job-status open">Open</span>
-          </div>
-          <div class="job-detail">${j.detail}</div>
-          <div class="job-assignees"><div style="font-size:12px;color:var(--text3)">Unassigned</div></div>
-        </div>
-      `).join('');
-
-    if (jobs.length > 0) document.getElementById('jobs-badge').style.display = 'block';
-  }, 500);
-}
-
-function updateJobsBadge() {
-  const open = allAssets.filter(a => a.status === 'missing' || a.status === 'stale').length;
-  document.getElementById('jobs-badge').style.display = open > 0 ? 'block' : 'none';
-  loadJobs();
-}
-
-// ---- UTILS ----
-function haversine(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-async function refreshData() {
-  const btn = document.getElementById('refresh-btn');
-  btn.classList.add('spinning');
-  await loadAssets();
-  btn.classList.remove('spinning');
-  showToast('Fleet data refreshed');
-}
-
-function pingBuzzer() { showToast('Buzzer ping sent to ' + (currentAsset ? currentAsset.id : 'device')); }
-function logPhoto() { showToast('Camera opened — photo will be logged to job'); }
-function openMapNav() {
-  if (currentAsset?.lat && currentAsset?.lng) {
-    window.open(`https://maps.apple.com/?daddr=${currentAsset.lat},${currentAsset.lng}&dirflg=w`);
-  } else { showToast('No GPS coordinates available'); }
-}
-
-function markRecovered() {
-  if (recoveryInterval) {
-    if (typeof recoveryInterval === 'number' && navigator.geolocation) {
-      navigator.geolocation.clearWatch(recoveryInterval);
-    } else { clearInterval(recoveryInterval); }
-    recoveryInterval = null;
-  }
-  showToast((currentAsset?.name || 'Asset') + ' marked as recovered');
-  setTimeout(() => showScreen('dashboard'), 800);
-}
-
-// ---- ROUTING ----
-function showScreen(name) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const back = document.getElementById('topbar-back');
-  const title = document.getElementById('topbar-title');
-
-  if (name === 'dashboard') {
-    document.getElementById('screen-dashboard').classList.add('active');
-    document.getElementById('nav-dashboard').classList.add('active');
-    back.style.display = 'none'; title.textContent = 'TrackR';
-    if (recoveryInterval) { clearInterval(recoveryInterval); recoveryInterval = null; }
-  } else if (name === 'detail') {
-    document.getElementById('screen-detail').classList.add('active');
-    back.style.display = 'flex';
-    title.textContent = currentAsset?.name || 'Asset detail';
-  } else if (name === 'recovery') {
-    document.getElementById('screen-recovery').classList.add('active');
-    back.style.display = 'flex';
-    title.textContent = 'Finding ' + (currentAsset?.id || '');
-  } else if (name === 'jobs') {
-    document.getElementById('screen-jobs').classList.add('active');
-    document.getElementById('nav-jobs').classList.add('active');
-    back.style.display = 'none'; title.textContent = 'Active jobs';
-  }
-}
-
-function goBack() {
-  const recoveryActive = document.getElementById('screen-recovery').classList.contains('active');
-  if (recoveryActive) {
-    if (recoveryInterval && navigator.geolocation && typeof recoveryInterval === 'number') {
-      navigator.geolocation.clearWatch(recoveryInterval);
-    } else if (recoveryInterval) { clearInterval(recoveryInterval); }
-    recoveryInterval = null;
-    showScreen('detail');
-  } else { showScreen('dashboard'); }
-}
-
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
-}
+var allAssets=[];var currentAsset=null;var currentFilter='all';var detailMap=null;var recoveryInterval=null;var userLocation=null;
+document.addEventListener('DOMContentLoaded',function(){updateDashTime();loadAssets();setInterval(updateDashTime,30000);if(navigator.geolocation){navigator.geolocation.watchPosition(function(pos){userLocation={lat:pos.coords.latitude,lng:pos.coords.longitude};},null,{enableHighAccuracy:true,maximumAge:30000});}});
+function updateDashTime(){var now=new Date();document.getElementById('dash-time').textContent='Updated '+now.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'})+' · '+now.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});}
+function statusLabel(s){if(s==='ok')return'In range';if(s==='stale')return'Stale';return'Missing';}
+async function loadAssets(){document.getElementById('dash-content').innerHTML='<div class="loading-state"><div class="loading-dots"><span></span><span></span><span></span></div><div>Loading fleet data…</div></div>';try{var res=await fetch('/ble/api/assets');if(!res.ok)throw new Error('HTTP '+res.status);var data=await res.json();if(data.error)throw new Error(data.error);allAssets=data.assets||[];var s=data.stats||{};document.getElementById('stat-missing').textContent=s.missing!==undefined?s.missing:'—';document.getElementById('stat-stale').textContent=s.stale!==undefined?s.stale:'—';document.getElementById('stat-ok').textContent=s.ok!==undefined?s.ok:'—';var chips=document.querySelectorAll('.chip');chips[0].textContent='All ('+allAssets.length+')';chips[1].textContent='Missing ('+allAssets.filter(function(a){return a.status==='missing';}).length+')';chips[2].textContent='Stale ('+allAssets.filter(function(a){return a.status==='stale';}).length+')';chips[3].textContent='In range ('+allAssets.filter(function(a){return a.status==='ok';}).length+')';var open=allAssets.filter(function(a){return a.status==='missing'||a.status==='stale';}).length;document.getElementById('jobs-badge').style.display=open>0?'block':'none';renderAssets(currentFilter);}catch(e){document.getElementById('dash-content').innerHTML='<div class="error-state"><div class="error-icon">⚠️</div><p style="color:var(--text2)">Could not load fleet data</p><small>'+e.message+'</small><button class="btn btn-secondary" style="max-width:160px;margin-top:8px" onclick="loadAssets()">Retry</button></div>';}}
+function renderAssets(filter){currentFilter=filter;var assets=filter==='all'?allAssets:allAssets.filter(function(a){return a.status===filter;});document.getElementById('list-section-label').textContent=filter==='all'?'ALL ASSETS':filter.toUpperCase()+' ASSETS';var html='';if(assets.length===0){html='<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:14px">No assets in this category</div>';}else{for(var i=0;i<assets.length;i++){var a=assets[i];html+='<div class="asset-card '+a.status+'" onclick="openAsset(\''+a.id+'\')">'+'<div class="asset-icon '+a.status+'">'+a.emoji+'</div>'+'<div class="asset-info">'+'<div class="asset-name">'+a.name+'</div>'+'<div class="asset-meta">'+a.lastSeen+' · '+a.seenBy+'</div>'+'</div>'+'<span class="status-badge '+a.status+'">'+statusLabel(a.status)+'</span>'+'<div class="chevron"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>'+'</div>';}}document.getElementById('dash-content').innerHTML='<div class="asset-list">'+html+'</div>';}
+function filterAssets(filter,el){document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('active');});el.classList.add('active');renderAssets(filter);}
+function openAsset(id){currentAsset=null;for(var i=0;i<allAssets.length;i++){if(allAssets[i].id===id){currentAsset=allAssets[i];break;}}if(!currentAsset)return;showScreen('detail');populateDetail(currentAsset);}
+function populateDetail(asset){document.getElementById('detail-name').textContent=asset.name||asset.id;document.getElementById('detail-id').textContent=asset.bleId||asset.id;var badge=document.getElementById('detail-badge');badge.textContent=statusLabel(asset.status);badge.className='status-badge '+asset.status;var lsEl=document.getElementById('detail-lastseen');lsEl.textContent=asset.lastSeen||'—';lsEl.className='info-cell-val '+(asset.status==='missing'?'danger':asset.status==='stale'?'warn':'ok');document.getElementById('detail-battery').textContent=asset.battery?parseFloat(asset.battery).toFixed(0)+'%':'—';document.getElementById('detail-type').textContent=asset.type||'—';document.getElementById('detail-group').textContent=asset.seenBy||'—';var distText='No GPS fix';if(asset.lat&&asset.lng){if(userLocation){var d=haversine(userLocation.lat,userLocation.lng,asset.lat,asset.lng);distText=d<1000?Math.round(d)+'m away':(d/1000).toFixed(1)+'km away';}else{distText=asset.lat.toFixed(4)+', '+asset.lng.toFixed(4);}}document.getElementById('map-dist').textContent=distText;document.getElementById('detail-timeline').innerHTML='<div class="timeline-item"><div class="timeline-dot latest"></div><div>'+'<div class="timeline-text">'+(asset.seenBy||'Last known position')+'</div>'+'<div class="timeline-time">'+(asset.lastSeen||'—')+(asset.rawHbTime?' · '+asset.rawHbTime:'')+'</div>'+'</div></div>'+(asset.lat&&asset.lng?'<div class="timeline-item"><div class="timeline-dot"></div><div>'+'<div class="timeline-text">GPS: '+asset.lat.toFixed(5)+', '+asset.lng.toFixed(5)+'</div>'+'<div class="timeline-time">Last fix</div></div></div>':'');document.getElementById('btn-recover').textContent=asset.status==='ok'?'Ping device':'Start recovery';setTimeout(function(){if(detailMap){detailMap.remove();detailMap=null;}var mc=document.getElementById('map-container');if(asset.lat&&asset.lng){mc.innerHTML='<div id="detail-map"></div><div class="map-overlay">Last known · <span>'+distText+'</span></div>';detailMap=L.map('detail-map',{zoomControl:true}).setView([asset.lat,asset.lng],16);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OSM'}).addTo(detailMap);var assetIcon=L.divIcon({html:'<div class="custom-pin '+asset.status+'">'+asset.emoji+'</div>',iconSize:[30,30],iconAnchor:[15,15],className:''});L.marker([asset.lat,asset.lng],{icon:assetIcon}).addTo(detailMap).bindPopup(asset.name+'<br>'+asset.lastSeen).openPopup();if(userLocation){var meIcon=L.divIcon({html:'<div class="custom-pin me" style="font-size:10px;font-weight:600">ME</div>',iconSize:[30,30],iconAnchor:[15,15],className:''});L.marker([userLocation.lat,userLocation.lng],{icon:meIcon}).addTo(detailMap);L.polyline([[userLocation.lat,userLocation.lng],[asset.lat,asset.lng]],{color:'#3d7fff',dashArray:'6 6',weight:1.5,opacity:0.6}).addTo(detailMap);}}else{mc.innerHTML='<div class="map-no-location"><div style="font-size:32px">📡</div><div>No GPS fix available</div><div style="font-size:12px;margin-top:4px">Device not yet located</div></div>';}},150);}
+function startRecovery(){if(!currentAsset)return;showScreen('recovery');document.getElementById('rec-dist').textContent='—';if(recoveryInterval){clearInterval(recoveryInterval);recoveryInterval=null;}if(userLocation&&currentAsset.lat&&currentAsset.lng){var d=haversine(userLocation.lat,userLocation.lng,currentAsset.lat,currentAsset.lng);document.getElementById('rec-dist').textContent=Math.round(d);updateSignal(d);updateDirection(userLocation,currentAsset);if(navigator.geolocation){recoveryInterval=navigator.geolocation.watchPosition(function(pos){userLocation={lat:pos.coords.latitude,lng:pos.coords.longitude};var dist=haversine(userLocation.lat,userLocation.lng,currentAsset.lat,currentAsset.lng);document.getElementById('rec-dist').textContent=Math.round(dist);updateSignal(dist);updateDirection(userLocation,currentAsset);},null,{enableHighAccuracy:true,maximumAge:5000});}}else{simulateRecovery();}}
+function updateSignal(dist){var rssi,strength,pct,hint;if(dist>200){rssi=-88;strength='weak';pct=15;hint='Move toward the last known location';}else if(dist>100){rssi=-78;strength='weak';pct=30;hint='Signal detected — keep moving';}else if(dist>50){rssi=-68;strength='medium';pct=55;hint='Getting warmer — you\'re close';}else if(dist>20){rssi=-58;strength='medium';pct=72;hint='Strong signal — scan the immediate area';}else{rssi=-47;strength='strong';pct=90;hint='Very close — check nearby assets';}document.getElementById('rec-rssi').textContent=rssi+' dBm';document.getElementById('rec-rssi').className='signal-val '+strength;var bar=document.getElementById('rec-bar');bar.style.width=pct+'%';bar.className='signal-bar-fill '+strength;document.getElementById('rec-hint').textContent=hint;}
+function updateDirection(from,to){var dLng=to.lng-from.lng;var dLat=to.lat-from.lat;var angle=Math.atan2(dLng,dLat)*180/Math.PI;var dirs=['north','north-east','east','south-east','south','south-west','west','north-west'];var dir=dirs[Math.round(((angle%360)+360)%360/45)%8];document.getElementById('rec-direction').textContent=dir;}
+function simulateRecovery(){var dist=285;function update(){if(dist>10)dist=Math.max(10,dist-(Math.random()*18+8));document.getElementById('rec-dist').textContent=Math.round(dist);updateSignal(dist);if(dist<=10&&recoveryInterval){clearInterval(recoveryInterval);recoveryInterval=null;}}update();recoveryInterval=setInterval(update,2500);}
+function haversine(lat1,lng1,lat2,lng2){var R=6371000;var dLat=(lat2-lat1)*Math.PI/180;var dLng=(lng2-lng1)*Math.PI/180;var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
+function loadJobs(){var jobs=allAssets.filter(function(a){return a.status==='missing'||a.status==='stale';});if(jobs.length===0){document.getElementById('jobs-list').innerHTML='<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:14px">No open jobs — all assets accounted for ✓</div>';return;}document.getElementById('jobs-list').innerHTML=jobs.map(function(a){return'<div class="job-card">'+'<div class="job-header"><div class="job-name">Recover '+a.name+'</div><span class="job-status open">Open</span></div>'+'<div class="job-detail">'+a.lastSeen+' · '+a.seenBy+(a.licensePlate?' · '+a.licensePlate:'')+'</div>'+'</div>';}).join('');}
+async function refreshData(){var btn=document.getElementById('refresh-btn');btn.classList.add('spinning');await loadAssets();btn.classList.remove('spinning');showToast('Fleet data refreshed');}
+function pingBuzzer(){showToast('Buzzer ping sent to '+(currentAsset?currentAsset.name:'device'));}
+function logPhoto(){showToast('Camera opened — photo will be logged');}
+function openMapNav(){if(currentAsset&&currentAsset.lat&&currentAsset.lng){window.open('https://maps.apple.com/?daddr='+currentAsset.lat+','+currentAsset.lng+'&dirflg=w');}else{showToast('No GPS coordinates available');}}
+function markRecovered(){if(recoveryInterval){if(typeof recoveryInterval==='number'&&navigator.geolocation){navigator.geolocation.clearWatch(recoveryInterval);}else{clearInterval(recoveryInterval);}recoveryInterval=null;}showToast((currentAsset?currentAsset.name:'Asset')+' marked as recovered');setTimeout(function(){showScreen('dashboard');},800);}
+function showScreen(name){document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active');});var back=document.getElementById('topbar-back');var title=document.getElementById('topbar-title');if(name==='dashboard'){document.getElementById('screen-dashboard').classList.add('active');document.getElementById('nav-dashboard').classList.add('active');back.style.display='none';title.textContent='TrackR';if(recoveryInterval){clearInterval(recoveryInterval);recoveryInterval=null;}}else if(name==='detail'){document.getElementById('screen-detail').classList.add('active');back.style.display='flex';title.textContent=currentAsset?currentAsset.name:'Asset detail';}else if(name==='recovery'){document.getElementById('screen-recovery').classList.add('active');back.style.display='flex';title.textContent='Finding '+(currentAsset?currentAsset.id:'');}else if(name==='jobs'){document.getElementById('screen-jobs').classList.add('active');document.getElementById('nav-jobs').classList.add('active');back.style.display='none';title.textContent='Active jobs';loadJobs();}}
+function goBack(){var recovActive=document.getElementById('screen-recovery').classList.contains('active');if(recovActive){if(recoveryInterval){if(typeof recoveryInterval==='number'&&navigator.geolocation){navigator.geolocation.clearWatch(recoveryInterval);}else{clearInterval(recoveryInterval);}recoveryInterval=null;}showScreen('detail');}else{showScreen('dashboard');}}
+function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2200);}
 </script>
 </body>
 </html>
