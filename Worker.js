@@ -7,12 +7,17 @@ const DATE_FROM = "07-04-2026 00:00:01";
 const DATE_TO = "13-04-2026 23:59:59";
 const GITHUB_RAW = "https://raw.githubusercontent.com/bs5jssxhm2-blip/Netstar-proxy/main";
 
+const MSO_BASE = "https://mso.mysmartobject.com/openapi/route/rest";
+
 // Token to IMEI mapping — insurer adds entries here per client
 const DRIVER_TOKENS = {
   "shaun-demo": "863719065635311",
   "sholto-demo": "860896051685469",
   "atthakan-demo": "861059061058628"
 };
+
+// MSO token cache (in-memory, resets on Worker restart)
+let msoTokenCache = { token: null, expiresAt: 0 };
 
 function cors(){return{"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type,x-api-key,Authorization","Access-Control-Max-Age":"86400"};}
 function json(data,status){status=status||200;return new Response(JSON.stringify(data),{status:status,headers:{"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}});}
@@ -154,13 +159,13 @@ async function handleDriverLookup(url){
   var driverName=os?os.driver||"Unknown":(vinfo&&vinfo.driver_name)||"Unknown";
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driving data available for this period.");
- var r=null;
-if(driverName&&driverName!=="Unknown"){
-  for(var i=0;i<list.length;i++){
-    if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}
+  var r=null;
+  if(driverName&&driverName!=="Unknown"){
+    for(var i=0;i<list.length;i++){
+      if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}
+    }
   }
-}
-if(!r)throw new Error("No driving data found for "+driverName+" in this period. Please check back later.");
+  if(!r)throw new Error("No driving data found for "+driverName+" in this period. Please check back later.");
   var scored=calcRisk(r);
   return json({imei:imei,driver_name:driverName,registration:(vinfo&&vinfo.registration)||imei,make:(vinfo&&vinfo.make)||"",model:(vinfo&&vinfo.model)||"",period_from:start,period_to:end,features:scored.features,risk_score:scored.risk_score,risk_band:riskBand(scored.risk_score),predicted_loss_cost:lossCost(scored.risk_score,annual_km),total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A",avg_speed:safe(r.avg_speed||0),max_speed:safe(r.max_speed||0)});
 }
@@ -178,13 +183,106 @@ async function handleTest(url){
   return json({status:res.status,body:text.slice(0,1000)});
 }
 
-addEventListener("fetch",function(event){event.respondWith(handle(event.request));});
+// ---- MSO / BLE TRACKER FUNCTIONS ----
 
-async function handle(request){
+function msoTimestamp(){
+  return new Date().toISOString().replace("T"," ").slice(0,19);
+}
+
+async function getMsoToken(env){
+  var now=Date.now();
+  if(msoTokenCache.token&&now<msoTokenCache.expiresAt-60000)return msoTokenCache.token;
+  var appKey=env&&env.MSO_APP_KEY?env.MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E";
+  var userId=env&&env.MSO_USER_ID?env.MSO_USER_ID:"shaunbr@netstaraus.com.au";
+  var userPwd=env&&env.MSO_USER_PWD_MD5?env.MSO_USER_PWD_MD5:"b9ce326cbcfe8c05c11087bbb182714d";
+  var params=new URLSearchParams({method:"mso.oauth.token.get",app_key:appKey,timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",user_id:userId,user_pwd_md5:userPwd,expires_in:"7200"});
+  var res=await fetch(MSO_BASE+"?"+params.toString());
+  var data=await res.json();
+  if(data.code!==0)throw new Error("MSO token error: "+data.message);
+  msoTokenCache.token=data.result.accessToken;
+  msoTokenCache.expiresAt=now+7200000;
+  return msoTokenCache.token;
+}
+
+async function msoGET(env,method,extra){
+  extra=extra||{};
+  var token=await getMsoToken(env);
+  var appKey=env&&env.MSO_APP_KEY?env.MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E";
+  var target=env&&env.MSO_TARGET?env.MSO_TARGET:"shaunbr@netstaraus.com.au";
+  var params=new URLSearchParams(Object.assign({method:method,app_key:appKey,timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:token,target:target},extra));
+  var res=await fetch(MSO_BASE+"?"+params.toString());
+  return res.json();
+}
+
+function msoTimeAgo(hbTime){
+  if(!hbTime)return"Never seen";
+  var last=new Date(hbTime.replace(" ","T")+"Z").getTime();
+  var mins=Math.round((Date.now()-last)/60000);
+  if(mins<1)return"Just now";
+  if(mins<60)return mins+"m ago";
+  var hrs=Math.floor(mins/60);var rem=mins%60;
+  return rem>0?hrs+"h "+rem+"m ago":hrs+"h ago";
+}
+
+function msoStatus(hbTime){
+  if(!hbTime)return"missing";
+  var last=new Date(hbTime.replace(" ","T")+"Z").getTime();
+  var age=(Date.now()-last)/60000;
+  if(age>120)return"missing";
+  if(age>30)return"stale";
+  return"ok";
+}
+
+function msoEmoji(name){
+  var n=(name||"").toLowerCase();
+  if(n.includes("truck")||n.includes("tk"))return"🚛";
+  if(n.includes("van")||n.includes("vn"))return"🚐";
+  if(n.includes("fork")||n.includes("fk"))return"🏭";
+  if(n.includes("trail")||n.includes("tr"))return"🏗";
+  if(n.includes("car"))return"🚗";
+  return"📦";
+}
+
+async function handleBleAssets(env){
+  var deviceList=await msoGET(env,"mso.user.device.list");
+  var locationList=await msoGET(env,"mso.user.device.location.list",{page_size:"100",account_range:"1"});
+  if(deviceList.code!==0)throw new Error(deviceList.message);
+  var locMap={};
+  if(locationList.code===0&&Array.isArray(locationList.result)){
+    locationList.result.forEach(function(loc){locMap[loc.imei]=loc;});
+  }
+  var assets=(deviceList.result||[]).map(function(d){
+    var loc=locMap[d.imei]||{};
+    var hb=loc.hbTime||loc.gpsTime||null;
+    var status=msoStatus(hb);
+    return{id:d.imei,name:d.vehicleName||d.deviceName||d.imei,type:d.vehicleModels||d.mcType||"Asset",emoji:msoEmoji(d.vehicleName||d.deviceName),status:status,lastSeen:msoTimeAgo(hb),seenBy:loc.geofence||"Last gateway",bleId:d.imei,lat:parseFloat(loc.lat)||null,lng:parseFloat(loc.lng)||null,battery:loc.electQuantity||null,speed:loc.speed||null,licensePlate:d.vehicleNumber||null,rawHbTime:hb||null};
+  });
+  var missing=assets.filter(function(a){return a.status==="missing";}).length;
+  var stale=assets.filter(function(a){return a.status==="stale";}).length;
+  var ok=assets.filter(function(a){return a.status==="ok";}).length;
+  return json({assets:assets,stats:{missing:missing,stale:stale,ok:ok,total:assets.length}});
+}
+
+async function handleBleAssetDetail(env,imei){
+  var loc=await msoGET(env,"mso.device.location.get",{imeis:imei});
+  if(loc.code!==0)throw new Error(loc.message);
+  var d=(loc.result||[])[0]||{};
+  var hb=d.hbTime||d.gpsTime||null;
+  return json({id:imei,name:d.deviceName||imei,status:msoStatus(hb),lastSeen:msoTimeAgo(hb),lat:parseFloat(d.lat)||null,lng:parseFloat(d.lng)||null,battery:d.electQuantity||null,speed:d.speed||null,geofence:d.geofence||null,accStatus:d.accStatus||null,rawHbTime:hb});
+}
+
+// ---- MAIN HANDLER ----
+
+addEventListener("fetch",function(event){event.respondWith(handle(event.request,event));});
+
+async function handle(request,event){
+  var env=(event&&event.env)||{};
   var url=new URL(request.url);
   var method=request.method.toUpperCase();
   if(method==="OPTIONS")return new Response(null,{status:204,headers:cors()});
   var csp={"Content-Security-Policy":"default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"};
+
+  // Existing HTML routes
   if(url.pathname==="/"||url.pathname===""){
     var html=await fetch(GITHUB_RAW+"/index.html").then(function(r){return r.text();});
     return new Response(html,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
@@ -197,15 +295,33 @@ async function handle(request){
     var drv=await fetch(GITHUB_RAW+"/driver.html?v="+Date.now()).then(function(r){return r.text();});
     return new Response(drv,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
-  if(url.pathname==="/health")return json({status:"ok",version:"5.6"});
+
+  // BLE tracker app
+  if(url.pathname==="/ble"||url.pathname==="/ble/"){
+    var ble=await fetch(GITHUB_RAW+"/ble-tracker/index.html").then(function(r){return r.text();});
+    return new Response(ble,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
+  }
+
+  if(url.pathname==="/health")return json({status:"ok",version:"5.7"});
+
   try{
     var p=url.pathname.replace(/\/$/,"");
+
+    // Existing API routes
     if(p==="/vehicles")       return await handleVehicles();
     if(p==="/fleet-scores")   return await handleFleetScores(url);
     if(p==="/driver-score")   return await handleDriverScore(url);
     if(p==="/live-status")    return await handleObjectStatusAll();
     if(p==="/driver-lookup")  return await handleDriverLookup(url);
     if(p==="/test")           return await handleTest(url);
+
+    // BLE tracker API routes
+    if(p==="/ble/api/assets")return await handleBleAssets(env);
+    if(p.startsWith("/ble/api/assets/")){
+      var imei=p.replace("/ble/api/assets/","");
+      return await handleBleAssetDetail(env,imei);
+    }
+
     return err("Unknown route: "+p,404);
   }catch(e){
     return err("Upstream error: "+e.message,502);
