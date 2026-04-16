@@ -246,13 +246,18 @@ function msoEmoji(name){
 async function handleBleAssets(env){
   var deviceList=await msoGET(env,"mso.user.device.list");
   if(deviceList.code!==0)throw new Error(deviceList.message);
-  var locationList={code:0,result:[]};
-  try{locationList=await msoGET(env,"mso.user.device.location.list",{page_size:"100",account_range:"1"});}catch(e){}
+  var locMap={};
+  try{
+    var locationList=await msoGET(env,"mso.user.device.location.list",{page_size:"100",account_range:"1"});
+    if(locationList.code===0&&Array.isArray(locationList.result)){
+      locationList.result.forEach(function(loc){locMap[loc.imei]=loc;});
+    }
+  }catch(e){}
   var assets=(deviceList.result||[]).map(function(d){
     var loc=locMap[d.imei]||{};
     var hb=loc.hbTime||loc.gpsTime||null;
     var status=msoStatus(hb);
-    return{id:d.imei,name:d.vehicleName||d.deviceName||d.imei,type:d.vehicleModels||d.mcType||"Asset",emoji:msoEmoji(d.vehicleName||d.deviceName),status:status,lastSeen:msoTimeAgo(hb),seenBy:loc.geofence||"Last gateway",bleId:d.imei,lat:parseFloat(loc.lat)||null,lng:parseFloat(loc.lng)||null,battery:loc.electQuantity||null,speed:loc.speed||null,licensePlate:d.vehicleNumber||null,rawHbTime:hb||null};
+    return{id:d.imei,name:d.vehicleName||d.deviceName||d.imei,type:d.vehicleModels||d.mcType||"Asset",emoji:msoEmoji(d.vehicleName||d.deviceName),status:status,lastSeen:msoTimeAgo(hb),seenBy:loc.geofence||d.deviceGroup||"Last gateway",bleId:d.imei,lat:parseFloat(loc.lat)||null,lng:parseFloat(loc.lng)||null,battery:loc.electQuantity||null,speed:loc.speed||null,licensePlate:d.vehicleNumber||null,rawHbTime:hb||null};
   });
   var missing=assets.filter(function(a){return a.status==="missing";}).length;
   var stale=assets.filter(function(a){return a.status==="stale";}).length;
