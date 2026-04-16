@@ -191,7 +191,7 @@ function msoTimestamp(){
 
 async function getMsoToken(env){
   var now=Date.now();
- if(false&&msoTokenCache.token&&now<msoTokenCache.expiresAt-60000)return msoTokenCache.token;
+ if(msoTokenCache.token&&now<msoTokenCache.expiresAt-60000)return msoTokenCache.token;
   var appKey=env&&env.MSO_APP_KEY?env.MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E";
   var userId=env&&env.MSO_USER_ID?env.MSO_USER_ID:"shaunbr@netstaraus.com";
 var userPwd=env&&env.MSO_USER_PWD_MD5?env.MSO_USER_PWD_MD5:"b9ce326cbcfe8c05c11087bbb182714d";
