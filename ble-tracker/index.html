@@ -522,7 +522,7 @@ async function openAsset(id) {
 
   // Then fetch fresh detail
   try {
-    const res = await fetch(`${API_BASE}/api/assets/${id}`);
+    const res = await fetch(`${API_BASE}/ble/api/assets/${id}`);
     const fresh = await res.json();
     if (!fresh.error) {
       currentAsset = { ...currentAsset, ...fresh };
