@@ -208,7 +208,7 @@ async function msoGET(env,method,extra){
   extra=extra||{};
   var token=await getMsoToken(env);
   var appKey=env&&env.MSO_APP_KEY?env.MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E";
-  var target=env&&env.MSO_TARGET?env.MSO_TARGET:"shaunbr@netstaraus.com.au";
+  var target=env&&env.MSO_TARGET?env.MSO_TARGET:"shaunbr@netstaraus.com";
   var params=new URLSearchParams(Object.assign({method:method,app_key:appKey,timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:token,target:target},extra));
   var res=await fetch(MSO_BASE+"?"+params.toString());
   return res.json();
