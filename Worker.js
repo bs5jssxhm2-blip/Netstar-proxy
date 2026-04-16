@@ -260,8 +260,8 @@ async function handle(request){
     if(p==="/live-status")   return await handleObjectStatusAll();
     if(p==="/driver-lookup") return await handleDriverLookup(url);
     if(p==="/test-osm")      return await handleTestOSM(url);
-    return err("Unknown route: "+p,404);
-  }catch(e){
-    return err("Upstream error: "+e.message,502);
-  }
+   if(p==="/ble/api/assets")return await handleBleAssets(env);
+if(p.startsWith("/ble/api/assets/")){
+  var imei=p.replace("/ble/api/assets/","");
+  return await handleBleAssetDetail(env,imei);
 }
