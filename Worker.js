@@ -314,7 +314,7 @@ async function handle(request,event){
     if(p==="/live-status")    return await handleObjectStatusAll();
     if(p==="/driver-lookup")  return await handleDriverLookup(url);
     if(p==="/test")           return await handleTest(url);
-
+if(p==="/ble/test-token"){try{var t=await getMsoToken(env);var params=new URLSearchParams({method:"mso.user.device.list",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:t,target:t});var r=await fetch(MSO_BASE+"?"+params.toString());return json({token:t,raw:await r.json()});}catch(e){return json({error:e.message});}}
     // BLE tracker API routes
     if(p==="/ble/api/assets")return await handleBleAssets(env);
     if(p.startsWith("/ble/api/assets/")){
