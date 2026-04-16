@@ -245,12 +245,9 @@ function msoEmoji(name){
 
 async function handleBleAssets(env){
   var deviceList=await msoGET(env,"mso.user.device.list");
-  var locationList=await msoGET(env,"mso.user.device.location.list",{page_size:"100",account_range:"1"});
   if(deviceList.code!==0)throw new Error(deviceList.message);
-  var locMap={};
-  if(locationList.code===0&&Array.isArray(locationList.result)){
-    locationList.result.forEach(function(loc){locMap[loc.imei]=loc;});
-  }
+  var locationList={code:0,result:[]};
+  try{locationList=await msoGET(env,"mso.user.device.location.list",{page_size:"100",account_range:"1"});}catch(e){}
   var assets=(deviceList.result||[]).map(function(d){
     var loc=locMap[d.imei]||{};
     var hb=loc.hbTime||loc.gpsTime||null;
