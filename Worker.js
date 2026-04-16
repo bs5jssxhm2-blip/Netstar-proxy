@@ -314,7 +314,7 @@ async function handle(request,event){
     if(p==="/live-status")    return await handleObjectStatusAll();
     if(p==="/driver-lookup")  return await handleDriverLookup(url);
     if(p==="/test")           return await handleTest(url);
-if(p==="/ble/raw-token"){var rawParams=new URLSearchParams({method:"mso.oauth.token.get",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",user_id:"shaunbr@netstaraus.com",user_pwd_md5:"b9ce326cbcfe8c05c11087bbb182714d",expires_in:"7200"});var rawRes=await fetch(MSO_BASE+"?"+rawParams.toString());var rawData=await rawRes.json();return json({request_user_id:"shaunbr@netstaraus.com",response:rawData});}
+    if(p==="/ble/raw-token"){var rawParams=new URLSearchParams({method:"mso.oauth.token.get",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",user_id:"shaunbr@netstaraus.com",user_pwd_md5:"b9ce326cbcfe8c05c11087bbb182714d",expires_in:"7200"});var rawRes=await fetch(MSO_BASE+"?"+rawParams.toString());var rawData=await rawRes.json();return json({request_user_id:"shaunbr@netstaraus.com",response:rawData});}
     // BLE tracker API routes
     if(p==="/ble/api/assets")return await handleBleAssets(env);
     if(p.startsWith("/ble/api/assets/")){
