@@ -255,7 +255,7 @@ async function handleBleAssets(env){
   }catch(e){}
   var assets=(deviceList.result||[]).map(function(d){
     var loc=locMap[d.imei]||{};
-    var hb=loc.hbTime||loc.gpsTime||null;
+   var hb=loc.gpsTime||loc.hbTime||null; 
     var status=msoStatus(hb);
     return{id:d.imei,name:d.vehicleName||d.deviceName||d.imei,type:d.vehicleModels||d.mcType||"Asset",emoji:msoEmoji(d.vehicleName||d.deviceName),status:status,lastSeen:msoTimeAgo(hb),seenBy:loc.geofence||d.deviceGroup||"Last gateway",bleId:d.imei,lat:parseFloat(loc.lat)||null,lng:parseFloat(loc.lng)||null,battery:loc.electQuantity||null,speed:loc.speed||null,licensePlate:d.vehicleNumber||null,rawHbTime:hb||null};
   });
