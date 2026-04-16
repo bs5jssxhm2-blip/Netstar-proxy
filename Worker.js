@@ -193,8 +193,8 @@ async function getMsoToken(env){
   var now=Date.now();
   if(msoTokenCache.token&&now<msoTokenCache.expiresAt-60000)return msoTokenCache.token;
   var appKey=env&&env.MSO_APP_KEY?env.MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E";
-  var userId=env&&env.MSO_USER_ID?env.MSO_USER_ID:"Netstar Aus";
-  var userPwd=env&&env.MSO_USER_PWD_MD5?env.MSO_USER_PWD_MD5:"b9ce326cbcfe8c05c11087bbb182714d";
+  var userId=env&&env.MSO_USER_ID?env.MSO_USER_ID:"shaunbr@netstaraus.com";
+var userPwd=env&&env.MSO_USER_PWD_MD5?env.MSO_USER_PWD_MD5:"b9ce326cbcfe8c05c11087bbb182714d";
   var params=new URLSearchParams({method:"mso.oauth.token.get",app_key:appKey,timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",user_id:userId,user_pwd_md5:userPwd,expires_in:"7200"});
   var res=await fetch(MSO_BASE+"?"+params.toString());
   var data=await res.json();
