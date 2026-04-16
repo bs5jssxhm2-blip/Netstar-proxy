@@ -6,18 +6,7 @@ const LOCATION = "Netstar Demo";
 const DATE_FROM = "07-04-2026 00:00:01";
 const DATE_TO = "13-04-2026 23:59:59";
 const GITHUB_RAW = "https://raw.githubusercontent.com/bs5jssxhm2-blip/Netstar-proxy/main";
-
-const MSO_BASE = "https://mso.mysmartobject.com/openapi/route/rest";
-
-// Token to IMEI mapping — insurer adds entries here per client
-const DRIVER_TOKENS = {
-  "shaun-demo": "863719065635311",
-  "sholto-demo": "860896051685469",
-  "atthakan-demo": "861059061058628"
-};
-
-// MSO token cache (in-memory, resets on Worker restart)
-let msoTokenCache = { token: null, expiresAt: 0 };
+const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 
 function cors(){return{"Access-Control-Allow-Origin":"*","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type,x-api-key,Authorization","Access-Control-Max-Age":"86400"};}
 function json(data,status){status=status||200;return new Response(JSON.stringify(data),{status:status,headers:{"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}});}
@@ -26,15 +15,60 @@ function pad(n){return String(n).padStart(2,"0");}
 function toNetstar(s,endOfDay){if(!s)return null;var d=new Date(s);if(isNaN(d))return null;if(endOfDay)d.setUTCHours(23,59,59);return pad(d.getUTCDate())+"-"+pad(d.getUTCMonth()+1)+"-"+d.getUTCFullYear()+" "+pad(d.getUTCHours())+":"+pad(d.getUTCMinutes())+":"+pad(d.getUTCSeconds());}
 function safe(v){var n=parseFloat(v);return isNaN(n)||n<0?0:n;}
 
-function calcRisk(r){
+async function getSpeedLimit(lat, lon){
+  try{
+    var q="[out:json][timeout:8];way(around:80,"+lat+","+lon+")[highway][maxspeed];out tags 1;";
+    var res=await fetch(OVERPASS_URL,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","User-Agent":"NetstarPAYD/1.0 shaunbr@netstaraus.com.au"},body:"data="+encodeURIComponent(q)});
+    var data=await res.json();
+    var elements=data.elements||[];
+    if(elements.length>0){
+      var ms=elements[0].tags&&elements[0].tags.maxspeed;
+      if(ms){
+        var limit=parseInt(ms);
+        if(!isNaN(limit))return limit;
+      }
+    }
+    // fallback: try without maxspeed filter to detect road type
+    var q2="[out:json][timeout:8];way(around:80,"+lat+","+lon+")[highway];out tags 1;";
+    var res2=await fetch(OVERPASS_URL,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","User-Agent":"NetstarPAYD/1.0 shaunbr@netstaraus.com.au"},body:"data="+encodeURIComponent(q2)});
+    var data2=await res2.json();
+    var elements2=data2.elements||[];
+    if(elements2.length>0){
+      var hw=elements2[0].tags&&elements2[0].tags.highway;
+      // Australian default speed limits by road type
+      var defaults={motorway:110,trunk:110,primary:80,secondary:80,tertiary:60,residential:50,living_street:10,service:20,unclassified:60};
+      if(hw&&defaults[hw])return defaults[hw];
+    }
+  }catch(e){}
+  return null;
+}
+
+function calcSpeedPenalty(vehicleSpeed, postedLimit){
+  if(!postedLimit||vehicleSpeed<=0)return{penalty:0,pct_over:0,posted:postedLimit};
+  var pct=(vehicleSpeed-postedLimit)/postedLimit*100;
+  if(pct<=0)return{penalty:0,pct_over:0,posted:postedLimit};
+  var penalty=0;
+  if(pct>=50)penalty=25;
+  else if(pct>=30)penalty=18;
+  else if(pct>=20)penalty=12;
+  else if(pct>=10)penalty=6;
+  else penalty=2;
+  return{penalty:penalty,pct_over:Math.round(pct),posted:postedLimit};
+}
+
+function calcRisk(r,speedPenaltyOverride){
   var braking=safe(r.harsh_breaking||0),accel=safe(r.harsh_acceleration||0),cornering=safe(r.harsh_cornering||0);
   var speeding=safe(r.over_speed||0),night=safe(r.night_drive||0),idling=safe(r.idling||0);
   var avgSpd=safe(r.avg_speed||0),maxSpd=safe(r.max_speed||0),km=safe(r.total_running_km||0);
   var per100=km>0?100/km:1;
   var eventScore=(braking*3.0*per100)+(accel*2.5*per100)+(cornering*2.0*per100)+(speeding*3.5*per100)+(night*1.5*per100)+(idling*0.5*per100);
   var speedPenalty=0;
-  if(avgSpd>80)speedPenalty+=15;else if(avgSpd>60)speedPenalty+=5;
-  if(maxSpd>130)speedPenalty+=20;else if(maxSpd>110)speedPenalty+=10;else if(maxSpd>100)speedPenalty+=5;
+  if(speedPenaltyOverride!=null){
+    speedPenalty=speedPenaltyOverride;
+  } else {
+    if(avgSpd>80)speedPenalty+=15;else if(avgSpd>60)speedPenalty+=5;
+    if(maxSpd>130)speedPenalty+=20;else if(maxSpd>110)speedPenalty+=10;else if(maxSpd>100)speedPenalty+=5;
+  }
   var raw=Math.min(eventScore*10+speedPenalty,100);
   return{risk_score:Math.round(Math.min(Math.max(raw,0),100)*10)/10,features:{harsh_breaking:braking,harsh_acceleration:accel,harsh_cornering:cornering,over_speed:speeding,night_drive:night,idling:idling}};
 }
@@ -106,12 +140,27 @@ async function handleDriverScore(url){
   var vinfo=null;
   for(var vi=0;vi<vlist.length;vi++){if(vlist[vi].imei===imei){vinfo=vlist[vi];break;}}
   var driverName=os?os.driver||"Unknown":(vinfo&&vinfo.driver_name)||"Unknown";
+
+  // Get speed limit from coordinates if vehicle is moving
+  var speedInfo=null;
+  var speedPenaltyOverride=null;
+  if(os&&os.coordinates){
+    var match=os.coordinates.match(/([-\d.]+),([-\d.]+)/);
+    if(match){
+      var lat=parseFloat(match[1]),lon=parseFloat(match[2]);
+      var currentSpeed=safe(os.speed||0);
+      var postedLimit=await getSpeedLimit(lat,lon);
+      speedInfo=calcSpeedPenalty(currentSpeed,postedLimit);
+      speedPenaltyOverride=speedInfo.penalty;
+    }
+  }
+
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driver data for this period.");
   var r=list[0];
   if(driverName&&driverName!=="Unknown"){for(var i=0;i<list.length;i++){if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}}}
-  var scored=calcRisk(r);
-  return json({imei:imei,driver_name:driverName,registration:(vinfo&&vinfo.registration)||imei,make:(vinfo&&vinfo.make)||"",model:(vinfo&&vinfo.model)||"",company:r.company_name||r.branch_name||COMPANY,period_from:start,period_to:end,features:scored.features,risk_score:scored.risk_score,risk_band:riskBand(scored.risk_score),predicted_loss_cost:lossCost(scored.risk_score,annual_km),total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A",avg_speed:safe(r.avg_speed||0),max_speed:safe(r.max_speed||0),speed_live:os?os.speed||"0":"0",ignition:os?os.ignition_status||"Unknown":"Unknown",location_address:os?os.location||"":"",coordinates:os?os.coordinates||"":"",last_seen:os?os.last_data||"":"",netstar_driver_score:0});
+  var scored=calcRisk(r,speedPenaltyOverride);
+  return json({imei:imei,driver_name:driverName,registration:(vinfo&&vinfo.registration)||imei,make:(vinfo&&vinfo.make)||"",model:(vinfo&&vinfo.model)||"",company:r.company_name||r.branch_name||COMPANY,period_from:start,period_to:end,features:scored.features,risk_score:scored.risk_score,risk_band:riskBand(scored.risk_score),predicted_loss_cost:lossCost(scored.risk_score,annual_km),total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A",avg_speed:safe(r.avg_speed||0),max_speed:safe(r.max_speed||0),speed_live:os?os.speed||"0":"0",ignition:os?os.ignition_status||"Unknown":"Unknown",location_address:os?os.location||"":"",coordinates:os?os.coordinates||"":"",last_seen:os?os.last_data||"":"",speed_limit_info:speedInfo,netstar_driver_score:0});
 }
 
 async function handleFleetScores(url){
@@ -125,7 +174,7 @@ async function handleFleetScores(url){
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driver data for this period.");
   var scored=list.map(function(r){
-    var s=calcRisk(r);
+    var s=calcRisk(r,null);
     var driverName=r.driver_name||r.driver||"Unknown";
     var matchedVehicle=null;
     for(var i=0;i<vlist.length;i++){if((vlist[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){matchedVehicle=vlist[i];break;}}
@@ -140,6 +189,7 @@ async function handleFleetScores(url){
 }
 
 async function handleDriverLookup(url){
+  var DRIVER_TOKENS={"shaun-demo":"863719065635311","sholto-demo":"860896051685469","atthakan-demo":"861059061058628"};
   var token=url.searchParams.get("token")||null;
   if(!token)throw new Error("Token required.");
   var imei=DRIVER_TOKENS[token]||null;
@@ -159,138 +209,28 @@ async function handleDriverLookup(url){
   var driverName=os?os.driver||"Unknown":(vinfo&&vinfo.driver_name)||"Unknown";
   var list=await getDriverPerf(start,end);
   if(!list.length)throw new Error("No driving data available for this period.");
-  var r=null;
-  if(driverName&&driverName!=="Unknown"){
-    for(var i=0;i<list.length;i++){
-      if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}
-    }
-  }
-  if(!r)throw new Error("No driving data found for "+driverName+" in this period. Please check back later.");
-  var scored=calcRisk(r);
+  var r=list[0];
+  if(driverName&&driverName!=="Unknown"){for(var i=0;i<list.length;i++){if((list[i].driver_name||"").toLowerCase()===driverName.toLowerCase()){r=list[i];break;}}}
+  var scored=calcRisk(r,null);
   return json({imei:imei,driver_name:driverName,registration:(vinfo&&vinfo.registration)||imei,make:(vinfo&&vinfo.make)||"",model:(vinfo&&vinfo.model)||"",period_from:start,period_to:end,features:scored.features,risk_score:scored.risk_score,risk_band:riskBand(scored.risk_score),predicted_loss_cost:lossCost(scored.risk_score,annual_km),total_distance_km:safe(r.total_running_km||0),running_time:r.total_running_duration||"N/A",avg_speed:safe(r.avg_speed||0),max_speed:safe(r.max_speed||0)});
 }
 
-async function handleTest(url){
-  var path=url.searchParams.get("path")||"/external/drivers/driver-performance-summary";
-  var imei=url.searchParams.get("imei")||null;
-  var start=url.searchParams.get("start")||DATE_FROM;
-  var end=url.searchParams.get("end")||DATE_TO;
-  var res;
-  if(path==="/vehicle/vehicles"){res=await fetch(UBI_BASE+path,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});}
-  else if(path==="/external/reports/object-status"){var q=imei?"?imei="+imei:"";res=await fetch(NETSTAR_BASE+path+q,{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});}
-  else{var params=new URLSearchParams({company_names:COMPANY,location_names:LOCATION,start_date_time:start,end_date_time:end});if(imei)params.set("imei",imei);res=await fetch(NETSTAR_BASE+path+"?"+params.toString(),{method:"GET",headers:{"x-api-key":NETSTAR_API_KEY,"Accept":"application/json"}});}
-  var text=await res.text();
-  return json({status:res.status,body:text.slice(0,1000)});
+async function handleTestOSM(url){
+  var lat=url.searchParams.get("lat")||"-33.742725";
+  var lon=url.searchParams.get("lon")||"151.0454699";
+  var limit=await getSpeedLimit(parseFloat(lat),parseFloat(lon));
+  var currentSpeed=safe(url.searchParams.get("speed")||"60");
+  var penalty=calcSpeedPenalty(currentSpeed,limit);
+  return json({lat:lat,lon:lon,posted_speed_limit:limit,current_speed:currentSpeed,speed_penalty:penalty});
 }
 
-// ---- MSO / BLE TRACKER FUNCTIONS ----
+addEventListener("fetch",function(event){event.respondWith(handle(event.request));});
 
-function msoTimestamp(){
-  return new Date().toISOString().replace("T"," ").slice(0,19);
-}
-
-async function getMsoToken(env){
-  var now=Date.now();
- if(msoTokenCache.token&&now<msoTokenCache.expiresAt-60000)return msoTokenCache.token;
-  var appKey=env&&env.MSO_APP_KEY?env.MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E";
-  var userId=env&&env.MSO_USER_ID?env.MSO_USER_ID:"shaunbr@netstaraus.com";
-var userPwd=env&&env.MSO_USER_PWD_MD5?env.MSO_USER_PWD_MD5:"b9ce326cbcfe8c05c11087bbb182714d";
-  var params=new URLSearchParams({method:"mso.oauth.token.get",app_key:appKey,timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",user_id:userId,user_pwd_md5:userPwd,expires_in:"7200"});
-  var res=await fetch(MSO_BASE+"?"+params.toString());
-  var data=await res.json();
-  if(data.code!==0)throw new Error("MSO token error: "+data.message);
-  msoTokenCache.token=data.result.accessToken;
-  msoTokenCache.expiresAt=now+7200000;
-  return msoTokenCache.token;
-}
-
-async function msoGET(env,method,extra){
-  extra=extra||{};
-  var token=await getMsoToken(env);
-  var appKey=env&&env.MSO_APP_KEY?env.MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E";
-  var target=env&&env.MSO_TARGET?env.MSO_TARGET:"shaunbr@netstaraus.com";
-  var params=new URLSearchParams(Object.assign({method:method,app_key:appKey,timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:token,target:target},extra));
-  var res=await fetch(MSO_BASE+"?"+params.toString());
-  return res.json();
-}
-
-function msoTimeAgo(hbTime){
-  if(!hbTime)return"Never seen";
-  var last=new Date(hbTime.replace(" ","T")+"Z").getTime();
-  var mins=Math.round((Date.now()-last)/60000);
-  if(mins<1)return"Just now";
-  if(mins<60)return mins+"m ago";
-  var hrs=Math.floor(mins/60);var rem=mins%60;
-  return rem>0?hrs+"h "+rem+"m ago":hrs+"h ago";
-}
-
-function msoStatus(hbTime){
-  if(!hbTime)return"missing";
-  var last=new Date(hbTime.replace(" ","T")+"Z").getTime();
-  var age=(Date.now()-last)/60000;
-  if(age>120)return"missing";
-  if(age>30)return"stale";
-  return"ok";
-}
-
-function msoEmoji(name){
-  var n=(name||"").toLowerCase();
-  if(n.includes("truck")||n.includes("tk"))return"🚛";
-  if(n.includes("van")||n.includes("vn"))return"🚐";
-  if(n.includes("fork")||n.includes("fk"))return"🏭";
-  if(n.includes("trail")||n.includes("tr"))return"🏗";
-  if(n.includes("car"))return"🚗";
-  return"📦";
-}
-
-async function handleBleAssets(env){
-  var deviceList=await msoGET(env,"mso.user.device.list");
-  if(deviceList.code!==0)throw new Error(deviceList.message);
-  var locMap={};
-  try{
-    var imeis=(deviceList.result||[]).map(function(d){return d.imei;}).join(",");
-    var freshToken=await getMsoToken(env);
-    var locParams=new URLSearchParams({method:"mso.device.location.get",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:freshToken,imeis:imeis});
-    var locRes=await fetch(MSO_BASE+"?"+locParams.toString());
-    var locData=await locRes.json();
-    if(locData.code===0&&Array.isArray(locData.result)){
-      locData.result.forEach(function(loc){locMap[loc.imei]=loc;});
-    }
-  }catch(e){}
-  var assets=(deviceList.result||[]).map(function(d){
-    var loc=locMap[d.imei]||{};
-    var hb=loc.gpsTime||loc.hbTime||null;
-    var lat=parseFloat(loc.lat)||0;
-    var lng=parseFloat(loc.lng)||0;
-    var status=msoStatus(hb);
-    return{id:d.imei,name:d.vehicleName||d.deviceName||d.imei,type:d.vehicleModels||d.mcType||"Asset",emoji:msoEmoji(d.vehicleName||d.deviceName),status:status,lastSeen:msoTimeAgo(hb),seenBy:loc.geofence||d.deviceGroup||"Last gateway",bleId:d.imei,lat:lat!==0?lat:null,lng:lng!==0?lng:null,battery:loc.electQuantity||null,speed:loc.speed||null,licensePlate:d.vehicleNumber||null,rawHbTime:hb||null};
-  });
-  var missing=assets.filter(function(a){return a.status==="missing";}).length;
-  var stale=assets.filter(function(a){return a.status==="stale";}).length;
-  var ok=assets.filter(function(a){return a.status==="ok";}).length;
-  return json({assets:assets,stats:{missing:missing,stale:stale,ok:ok,total:assets.length}});
-}
-
-async function handleBleAssetDetail(env,imei){
-  var loc=await msoGET(env,"mso.device.location.get",{imeis:imei});
-  if(loc.code!==0)throw new Error(loc.message);
-  var d=(loc.result||[])[0]||{};
-  var hb=d.hbTime||d.gpsTime||null;
-  return json({id:imei,name:d.deviceName||imei,status:msoStatus(hb),lastSeen:msoTimeAgo(hb),lat:parseFloat(d.lat)||null,lng:parseFloat(d.lng)||null,battery:d.electQuantity||null,speed:d.speed||null,geofence:d.geofence||null,accStatus:d.accStatus||null,rawHbTime:hb});
-}
-
-// ---- MAIN HANDLER ----
-
-addEventListener("fetch",function(event){event.respondWith(handle(event.request,event));});
-
-async function handle(request,event){
-  var env={MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E",MSO_USER_ID:"shaunbr@netstaraus.com",MSO_USER_PWD_MD5:"b9ce326cbcfe8c05c11087bbb182714d",MSO_TARGET:"shaunbr@netstaraus.com"};
+async function handle(request){
   var url=new URL(request.url);
   var method=request.method.toUpperCase();
   if(method==="OPTIONS")return new Response(null,{status:204,headers:cors()});
   var csp={"Content-Security-Policy":"default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"};
-
-  // Existing HTML routes
   if(url.pathname==="/"||url.pathname===""){
     var html=await fetch(GITHUB_RAW+"/index.html").then(function(r){return r.text();});
     return new Response(html,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
@@ -300,36 +240,18 @@ async function handle(request,event){
     return new Response(roi,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
   if(url.pathname==="/driver"){
-    var drv=await fetch(GITHUB_RAW+"/driver.html?v="+Date.now()).then(function(r){return r.text();});
+    var drv=await fetch(GITHUB_RAW+"/driver.html").then(function(r){return r.text();});
     return new Response(drv,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
   }
-
-  // BLE tracker app
-  if(url.pathname==="/ble"||url.pathname==="/ble/"){
-    var ble=await fetch(GITHUB_RAW+"/ble-tracker/index.html").then(function(r){return r.text();});
-    return new Response(ble,{status:200,headers:Object.assign({"Content-Type":"text/html;charset=UTF-8"},csp)});
-  }
-
   if(url.pathname==="/health")return json({status:"ok",version:"5.7"});
-
   try{
     var p=url.pathname.replace(/\/$/,"");
-
-    // Existing API routes
     if(p==="/vehicles")       return await handleVehicles();
     if(p==="/fleet-scores")   return await handleFleetScores(url);
     if(p==="/driver-score")   return await handleDriverScore(url);
     if(p==="/live-status")    return await handleObjectStatusAll();
     if(p==="/driver-lookup")  return await handleDriverLookup(url);
-    if(p==="/ble/test-location"){var freshToken=await getMsoToken(env);var imeis=["780901703168027","780901807230839"].join(",");var locParams=new URLSearchParams({method:"mso.device.location.get",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:freshToken,imeis:imeis});var locRes=await fetch(MSO_BASE+"?"+locParams.toString());return json(await locRes.json());}
-    if(p==="/ble/raw-devices"){var rdToken="e65e8002bdfcd45be6d3ab4cbc4370be";var targets=["shaunbr@netstaraus.com","Netstar Aus","netstaraus","shaunbr"];var results={};for(var i=0;i<targets.length;i++){var rdParams=new URLSearchParams({method:"mso.user.device.list",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:rdToken,target:targets[i]});var rdRes=await fetch(MSO_BASE+"?"+rdParams.toString());results[targets[i]]=await rdRes.json();}return json(results);}
-    // BLE tracker API routes
-    if(p==="/ble/api/assets")return await handleBleAssets(env);
-    if(p.startsWith("/ble/api/assets/")){
-      var imei=p.replace("/ble/api/assets/","");
-      return await handleBleAssetDetail(env,imei);
-    }
-
+    if(p==="/test-osm")       return await handleTestOSM(url);
     return err("Unknown route: "+p,404);
   }catch(e){
     return err("Upstream error: "+e.message,502);
