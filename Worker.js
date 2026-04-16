@@ -273,7 +273,7 @@ async function handleBleAssetDetail(env,imei){
 addEventListener("fetch",function(event){event.respondWith(handle(event.request,event));});
 
 async function handle(request,event){
-  var env=(event&&event.env)||{};
+  var env={MSO_APP_KEY:"8FB345B8693CCD00E5975EC0088D570E",MSO_USER_ID:"shaunbr@netstaraus.com",MSO_USER_PWD_MD5:"b9ce326cbcfe8c05c11087bbb182714d",MSO_TARGET:"shaunbr@netstaraus.com"};
   var url=new URL(request.url);
   var method=request.method.toUpperCase();
   if(method==="OPTIONS")return new Response(null,{status:204,headers:cors()});
