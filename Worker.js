@@ -248,16 +248,22 @@ async function handleBleAssets(env){
   if(deviceList.code!==0)throw new Error(deviceList.message);
   var locMap={};
   try{
-    var locationList=await msoGET(env,"mso.user.device.location.list",{page_size:"100",account_range:"1"});
-    if(locationList.code===0&&Array.isArray(locationList.result)){
-      locationList.result.forEach(function(loc){locMap[loc.imei]=loc;});
+    var imeis=(deviceList.result||[]).map(function(d){return d.imei;}).join(",");
+    var freshToken=await getMsoToken(env);
+    var locParams=new URLSearchParams({method:"mso.device.location.get",app_key:"8FB345B8693CCD00E5975EC0088D570E",timestamp:msoTimestamp(),sign_method:"md5",v:"0.9",format:"json",access_token:freshToken,imeis:imeis});
+    var locRes=await fetch(MSO_BASE+"?"+locParams.toString());
+    var locData=await locRes.json();
+    if(locData.code===0&&Array.isArray(locData.result)){
+      locData.result.forEach(function(loc){locMap[loc.imei]=loc;});
     }
   }catch(e){}
   var assets=(deviceList.result||[]).map(function(d){
     var loc=locMap[d.imei]||{};
-   var hb=loc.gpsTime||loc.hbTime||null; 
+    var hb=loc.gpsTime||loc.hbTime||null;
+    var lat=parseFloat(loc.lat)||0;
+    var lng=parseFloat(loc.lng)||0;
     var status=msoStatus(hb);
-    return{id:d.imei,name:d.vehicleName||d.deviceName||d.imei,type:d.vehicleModels||d.mcType||"Asset",emoji:msoEmoji(d.vehicleName||d.deviceName),status:status,lastSeen:msoTimeAgo(hb),seenBy:loc.geofence||d.deviceGroup||"Last gateway",bleId:d.imei,lat:parseFloat(loc.lat)||null,lng:parseFloat(loc.lng)||null,battery:loc.electQuantity||null,speed:loc.speed||null,licensePlate:d.vehicleNumber||null,rawHbTime:hb||null};
+    return{id:d.imei,name:d.vehicleName||d.deviceName||d.imei,type:d.vehicleModels||d.mcType||"Asset",emoji:msoEmoji(d.vehicleName||d.deviceName),status:status,lastSeen:msoTimeAgo(hb),seenBy:loc.geofence||d.deviceGroup||"Last gateway",bleId:d.imei,lat:lat!==0?lat:null,lng:lng!==0?lng:null,battery:loc.electQuantity||null,speed:loc.speed||null,licensePlate:d.vehicleNumber||null,rawHbTime:hb||null};
   });
   var missing=assets.filter(function(a){return a.status==="missing";}).length;
   var stale=assets.filter(function(a){return a.status==="stale";}).length;
