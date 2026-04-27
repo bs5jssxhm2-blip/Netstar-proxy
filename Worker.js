@@ -70,16 +70,56 @@ function toFleetAIDate(isoDate, endOfDay = false) {
   return `${d}-${m}-${y} ${endOfDay ? "23:59:59" : "00:00:01"}`;
 }
 
-// Get driver performance summary for date range
+// Get driver performance — API enforces 10-day max window, so chunk and merge
 async function getDriverPerf(dateFrom, dateTo, env) {
-  const q = new URLSearchParams({
-    company_names: COMPANY,
-    location_names: LOCATION,
-    start_date_time: toFleetAIDate(dateFrom, false),
-    end_date_time: toFleetAIDate(dateTo, true),
-  });
-  const data = await netstarGET("/external/drivers/driver-performance-summary?" + q.toString(), env);
-  return Array.isArray(data) ? data : (data.data || data.result || []);
+  const start = new Date(dateFrom);
+  const end = new Date(dateTo);
+  const allResults = [];
+
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    const chunkEnd = new Date(cursor);
+    chunkEnd.setDate(chunkEnd.getDate() + 9); // 10-day window
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+
+    const fromStr = cursor.toISOString().slice(0, 10);
+    const toStr = chunkEnd.toISOString().slice(0, 10);
+
+    const q = new URLSearchParams({
+      company_names: COMPANY,
+      location_names: LOCATION,
+      start_date_time: toFleetAIDate(fromStr, false),
+      end_date_time: toFleetAIDate(toStr, true),
+    });
+
+    try {
+      const data = await netstarGET("/external/drivers/driver-performance-summary?" + q.toString(), env);
+      const rows = Array.isArray(data) ? data : (data.data || data.result || []);
+      allResults.push(...rows);
+    } catch(e) {
+      // log but continue with other chunks
+    }
+
+    cursor.setDate(cursor.getDate() + 10);
+  }
+
+  // Merge rows by registration — sum numeric fields across chunks
+  const merged = {};
+  for (const row of allResults) {
+    const key = String(row.Registration || row.registration || row.Imei || row.imei || Math.random());
+    if (!merged[key]) {
+      merged[key] = { ...row };
+    } else {
+      // Sum the key numeric fields
+      for (const f of ["DistanceKm","distance_km","Distance","FuelConsumed","fuel_consumed","Fuel",
+                        "TripCount","trip_count","Trips","OffRoadKm","off_road_km",
+                        "OdometerEnd","odometer_end","OdometerStart","odometer_start"]) {
+        if (row[f] != null) merged[key][f] = (parseFloat(merged[key][f]) || 0) + parseFloat(row[f]);
+      }
+    }
+  }
+
+  return Object.values(merged);
 }
 
 // Get object status (odometer, fuel, speed) by IMEI
@@ -151,7 +191,7 @@ async function ftcSummary(dateFrom, dateTo, env) {
 async function probe(dateFrom, dateTo, env) {
   const key = getKey(env);
   const from = dateFrom || "2025-04-01";
-  const to = dateTo || "2025-04-30";
+  const to = dateTo || "2025-04-07";
   const xApiHeaders = { "x-api-key": key, "Accept": "application/json" };
   const bearerHeaders = { "Authorization": "Bearer " + key, "Accept": "application/json" };
 
