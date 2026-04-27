@@ -357,16 +357,23 @@ export default {
             registration: mv?.registration || "", make: mv?.make || "", model: mv?.model || "",
             speed: os.speed || "0", location: os.location || "", status: os.status_hidden || "Unknown",
             risk_score: riskScore, loss_cost: lc, risk_band: rb,
-            // Flat fields expected by driver.html
+            // Aliases for PAYD scorer renderDetail function
+            predicted_loss_cost: lc,
+            total_distance_km: km,
             km_driven: km, total_running_km: km,
             avg_speed: avgSpd, max_speed: maxSpd,
             total_running_duration: r.total_running_duration || "0:00",
+            running_time: r.total_running_duration || "0:00",
+            location_address: os.location || "",
+            ignition: os.ignition_status || "Off",
+            speed_live: os.speed || "0",
+            period_from: dateFrom, period_to: dateTo,
             harsh_breaking: harshBrake, harsh_acceleration: harshAccel, harsh_cornering: harshCorn,
             non_stop_drive: parseInt(r.non_stop_drive || 0),
             night_drive: parseInt(r.night_drive || 0),
             over_speed: parseInt(r.over_speed || 0),
             idling: parseInt(r.idling || 0),
-            features: { harsh_breaking: harshBrake, harsh_acceleration: harshAccel, harsh_cornering: harshCorn, max_speed: maxSpd, avg_speed: avgSpd },
+            features: { harsh_breaking: harshBrake, harsh_acceleration: harshAccel, harsh_cornering: harshCorn, max_speed: maxSpd, avg_speed: avgSpd, over_speed: parseInt(r.over_speed||0), night_drive: parseInt(r.night_drive||0), idling: parseInt(r.idling||0) },
           };
         }));
 
