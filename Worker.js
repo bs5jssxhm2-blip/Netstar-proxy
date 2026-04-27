@@ -1,34 +1,37 @@
 /**
  * Netstar Proxy — Cloudflare Worker
- * 
+ *
  * Routes:
  *   GET  /                          → serves the PAYD Risk Scorer HTML from GitHub
  *   GET  /health                    → health check
- *   GET  /fleetai/vehicles          → proxy: FleetAI vehicle list (active fleet)
+ *   GET  /fleetai/probe             → diagnostic: tests all known FleetAI endpoints
+ *   GET  /fleetai/vehicles          → proxy: FleetAI vehicle list
  *   GET  /fleetai/trips             → proxy: FleetAI trip summary for date range
  *   GET  /fleetai/fuel              → proxy: FleetAI fuel records for date range
- *   GET  /fleetai/ftc-summary       → proxy: combined FTC-ready payload (vehicles + trips + fuel)
+ *   GET  /fleetai/ftc-summary       → proxy: combined FTC-ready payload
  *
- * Environment variables (set in Cloudflare dashboard → Workers → Settings → Variables):
- *   FLEETAI_API_KEY   — Bearer token for FleetAI API
- *   GITHUB_RAW_URL    — Raw URL for the PAYD scorer HTML (existing)
- *
- * CORS: allowed from any origin so the FTC tool artifact can call this directly.
+ * Env vars (Cloudflare → Workers → Settings → Variables):
+ *   FLEETAI_API_KEY   — Bearer token (fallback hardcoded below)
+ *   GITHUB_RAW_URL    — Raw URL for PAYD scorer HTML
  */
 
 const FLEETAI_BASE = "https://fleetai-api.netstaraus.com.au";
+const FALLBACK_KEY = "aROAW0rN00qS3Ar5iOnog";
 
-// ─── CORS HEADERS ─────────────────────────────────────────────────────────────
+function getKey(env) {
+  return env.FLEETAI_API_KEY || FALLBACK_KEY;
+}
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-function corsResponse(body, status = 200, extraHeaders = {}) {
+function corsResponse(body, status = 200) {
   return new Response(body, {
     status,
-    headers: { "Content-Type": "application/json", ...CORS, ...extraHeaders },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 }
 
@@ -36,50 +39,93 @@ function errorResponse(message, status = 500) {
   return corsResponse(JSON.stringify({ error: message }), status);
 }
 
-// ─── FLEETAI PROXY HELPER ─────────────────────────────────────────────────────
 async function proxyFleetAI(path, env) {
   const url = `${FLEETAI_BASE}${path}`;
   const res = await fetch(url, {
     headers: {
-      "Authorization": `Bearer ${env.FLEETAI_API_KEY}`,
+      "Authorization": `Bearer ${getKey(env)}`,
       "Content-Type": "application/json",
       "Accept": "application/json",
     },
   });
-
   const text = await res.text();
-  if (!res.ok) {
-    return errorResponse(
-      `FleetAI returned ${res.status}: ${text.slice(0, 200)}`,
-      res.status
-    );
-  }
+  if (!res.ok) return errorResponse(`FleetAI ${res.status}: ${text.slice(0, 300)}`, res.status);
   return corsResponse(text, 200);
 }
 
-// ─── FTC SUMMARY — combines vehicles + trip summary into one payload ──────────
-// The FTC tool calls this single endpoint to get everything it needs.
-// We attempt multiple FleetAI endpoint shapes to handle API version differences.
+async function probe(dateFrom, dateTo, env) {
+  const headers = {
+    "Authorization": `Bearer ${getKey(env)}`,
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  };
+  const from = dateFrom || "2025-04-01";
+  const to   = dateTo   || "2025-04-30";
+
+  const candidates = [
+    `${FLEETAI_BASE}/api/v2/fleet/summary?date_from=${from}&date_to=${to}`,
+    `${FLEETAI_BASE}/api/v1/vehicles/trips/summary?start=${from}&end=${to}`,
+    `${FLEETAI_BASE}/api/v1/vehicles?active=true&stats_from=${from}&stats_to=${to}`,
+    `${FLEETAI_BASE}/api/v1/vehicles?active=true`,
+    `${FLEETAI_BASE}/api/vehicles?start_date=${from}&end_date=${to}&include_trips=true`,
+    `${FLEETAI_BASE}/api/vehicles`,
+    `${FLEETAI_BASE}/api/v1/vehicles/report?from=${from}&to=${to}`,
+    `${FLEETAI_BASE}/api/v1/trips?date_from=${from}&date_to=${to}`,
+    `${FLEETAI_BASE}/api/v1/trips/summary?date_from=${from}&date_to=${to}`,
+    `${FLEETAI_BASE}/api/v1/fuel?date_from=${from}&date_to=${to}`,
+    `${FLEETAI_BASE}/api/v1/fleet`,
+    `${FLEETAI_BASE}/api/v1/fleet/vehicles`,
+    `${FLEETAI_BASE}/v1/fleet/report?from=${from}&to=${to}`,
+    `${FLEETAI_BASE}/api/v1/drivers`,
+    `${FLEETAI_BASE}/api/v1/assets`,
+    `${FLEETAI_BASE}/api/v1/units`,
+    `${FLEETAI_BASE}/api/v1/devices`,
+  ];
+
+  const results = await Promise.allSettled(
+    candidates.map(async (url) => {
+      const res = await fetch(url, { headers });
+      let preview = null;
+      try { preview = (await res.text()).slice(0, 400); } catch {}
+      return { url, status: res.status, ok: res.ok, preview };
+    })
+  );
+
+  const report = results.map((r, i) =>
+    r.status === "fulfilled" ? r.value : { url: candidates[i], status: "fetch_error", ok: false, preview: r.reason?.message }
+  );
+
+  return corsResponse(JSON.stringify({
+    key_used: getKey(env).slice(0,4) + "***" + getKey(env).slice(-4),
+    date_range: { from, to },
+    summary: {
+      accessible: report.filter(r => r.ok).length,
+      denied:     report.filter(r => r.status === 401 || r.status === 403).length,
+      not_found:  report.filter(r => r.status === 404).length,
+      errors:     report.filter(r => !r.ok && ![401,403,404].includes(r.status)).length,
+    },
+    accessible: report.filter(r => r.ok),
+    denied:     report.filter(r => r.status === 401 || r.status === 403),
+    not_found:  report.filter(r => r.status === 404),
+    errors:     report.filter(r => !r.ok && ![401,403,404].includes(r.status)),
+  }, null, 2), 200);
+}
+
 async function ftcSummary(dateFrom, dateTo, env) {
   const headers = {
-    "Authorization": `Bearer ${env.FLEETAI_API_KEY}`,
+    "Authorization": `Bearer ${getKey(env)}`,
     "Content-Type": "application/json",
     "Accept": "application/json",
   };
 
-  // Candidate endpoint patterns — FleetAI has varied these across versions.
-  // We try each in order and return the first successful response with data.
   const candidates = [
-    // v2 summary endpoint
     `${FLEETAI_BASE}/api/v2/fleet/summary?date_from=${dateFrom}&date_to=${dateTo}`,
-    // v1 vehicles with trip aggregation
     `${FLEETAI_BASE}/api/v1/vehicles/trips/summary?start=${dateFrom}&end=${dateTo}`,
-    // older flat endpoint
-    `${FLEETAI_BASE}/api/vehicles/report?from=${dateFrom}&to=${dateTo}&include_fuel=true`,
-    // vehicle list with date-scoped stats
     `${FLEETAI_BASE}/api/v1/vehicles?active=true&stats_from=${dateFrom}&stats_to=${dateTo}`,
-    // minimal vehicle list — no trip data, will need separate fuel call
+    `${FLEETAI_BASE}/api/vehicles?start_date=${dateFrom}&end_date=${dateTo}&include_trips=true`,
     `${FLEETAI_BASE}/api/v1/vehicles?active=true`,
+    `${FLEETAI_BASE}/api/v1/fleet/vehicles`,
+    `${FLEETAI_BASE}/api/v1/assets`,
   ];
 
   let lastStatus = null;
@@ -89,22 +135,13 @@ async function ftcSummary(dateFrom, dateTo, env) {
     try {
       const res = await fetch(url, { headers });
       const body = await res.text();
-
-      if (res.status === 401) {
-        return errorResponse("FleetAI API key invalid or expired.", 401);
-      }
-      if (res.status === 403) {
-        return errorResponse("FleetAI API key does not have fleet read permission.", 403);
-      }
-
+      if (res.status === 401) return errorResponse("FleetAI API key invalid or expired.", 401);
+      if (res.status === 403) return errorResponse("FleetAI API key lacks fleet read permission.", 403);
       if (res.ok) {
         let data;
         try { data = JSON.parse(body); } catch { continue; }
-
-        // Validate we got something usable — at minimum an array or object with vehicles
         const vehicles = data?.vehicles || data?.data?.vehicles || data?.data || (Array.isArray(data) ? data : null);
         if (vehicles && (Array.isArray(vehicles) ? vehicles.length > 0 : Object.keys(vehicles).length > 0)) {
-          // Wrap in a consistent envelope for the FTC tool to consume
           return corsResponse(JSON.stringify({
             source_endpoint: url,
             date_from: dateFrom,
@@ -114,7 +151,6 @@ async function ftcSummary(dateFrom, dateTo, env) {
           }), 200);
         }
       }
-
       lastStatus = res.status;
       lastBody = body?.slice(0, 300);
     } catch (e) {
@@ -122,82 +158,61 @@ async function ftcSummary(dateFrom, dateTo, env) {
     }
   }
 
-  return errorResponse(
-    `No FleetAI endpoint returned vehicle data. Last status: ${lastStatus}. Body: ${lastBody}`,
-    502
-  );
+  return errorResponse(`No FleetAI endpoint returned vehicle data. Last status: ${lastStatus}. Body: ${lastBody}`, 502);
 }
 
-// ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // Preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS });
-    }
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
-    // ── Health check ──────────────────────────────────────────────────────────
     if (path === "/health") {
       return corsResponse(JSON.stringify({
         status: "ok",
         worker: "netstar-proxy",
         timestamp: new Date().toISOString(),
-        fleetai_key_set: !!env.FLEETAI_API_KEY,
+        key_preview: getKey(env).slice(0,4) + "***",
       }));
     }
 
-    // ── FleetAI: FTC summary (main endpoint for FTC tool) ─────────────────────
+    if (path === "/fleetai/probe") {
+      return probe(url.searchParams.get("date_from"), url.searchParams.get("date_to"), env);
+    }
+
     if (path === "/fleetai/ftc-summary") {
       const dateFrom = url.searchParams.get("date_from") || url.searchParams.get("from");
       const dateTo   = url.searchParams.get("date_to")   || url.searchParams.get("to");
-      if (!dateFrom || !dateTo) {
-        return errorResponse("Missing required params: date_from and date_to (YYYY-MM-DD)", 400);
-      }
+      if (!dateFrom || !dateTo) return errorResponse("Missing date_from and date_to (YYYY-MM-DD)", 400);
       return ftcSummary(dateFrom, dateTo, env);
     }
 
-    // ── FleetAI: vehicle list ─────────────────────────────────────────────────
     if (path === "/fleetai/vehicles") {
       const qs = url.searchParams.toString();
       return proxyFleetAI(`/api/v1/vehicles${qs ? `?${qs}` : "?active=true"}`, env);
     }
 
-    // ── FleetAI: trip summary ─────────────────────────────────────────────────
     if (path === "/fleetai/trips") {
       const dateFrom = url.searchParams.get("date_from");
       const dateTo   = url.searchParams.get("date_to");
       if (!dateFrom || !dateTo) return errorResponse("Missing date_from / date_to", 400);
-      return proxyFleetAI(
-        `/api/v1/trips/summary?date_from=${dateFrom}&date_to=${dateTo}`,
-        env
-      );
+      return proxyFleetAI(`/api/v1/trips/summary?date_from=${dateFrom}&date_to=${dateTo}`, env);
     }
 
-    // ── FleetAI: fuel records ─────────────────────────────────────────────────
     if (path === "/fleetai/fuel") {
       const dateFrom = url.searchParams.get("date_from");
       const dateTo   = url.searchParams.get("date_to");
       if (!dateFrom || !dateTo) return errorResponse("Missing date_from / date_to", 400);
-      return proxyFleetAI(
-        `/api/v1/fuel?date_from=${dateFrom}&date_to=${dateTo}`,
-        env
-      );
+      return proxyFleetAI(`/api/v1/fuel?date_from=${dateFrom}&date_to=${dateTo}`, env);
     }
 
-    // ── PAYD Risk Scorer HTML (existing route) ─────────────────────────────────
     if (path === "/" || path === "/index.html") {
-      if (!env.GITHUB_RAW_URL) {
-        return new Response("GITHUB_RAW_URL not configured", { status: 500 });
-      }
+      if (!env.GITHUB_RAW_URL) return new Response("GITHUB_RAW_URL not configured", { status: 500 });
       try {
         const res = await fetch(env.GITHUB_RAW_URL);
         const html = await res.text();
-        return new Response(html, {
-          headers: { "Content-Type": "text/html;charset=UTF-8", ...CORS },
-        });
+        return new Response(html, { headers: { "Content-Type": "text/html;charset=UTF-8", ...CORS } });
       } catch (e) {
         return new Response(`Failed to fetch from GitHub: ${e.message}`, { status: 502 });
       }
