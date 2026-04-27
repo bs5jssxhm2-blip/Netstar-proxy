@@ -310,6 +310,8 @@ export default {
         return corsResponse(JSON.stringify({ vehicles: scored, total: scored.length, date_from: dateFrom, date_to: dateTo }));
       } catch(e) { return errorResponse(e.message, 502); }
     }
+
+    if (path === "/fleetai/probe") {
       return probe(url.searchParams.get("date_from"), url.searchParams.get("date_to"), env);
     }
 
