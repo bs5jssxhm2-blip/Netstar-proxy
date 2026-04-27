@@ -72,53 +72,112 @@ function toFleetAIDate(isoDate, endOfDay = false) {
   return `${d}-${m}-${y} ${endOfDay ? "23:59:59" : "00:00:01"}`;
 }
 
-// Get driver performance — API enforces 10-day max window, so chunk and merge
+// Get driver performance — API enforces 10-day max window, so chunk and compute weighted rolling average
+// More recent chunks carry higher weight (exponential decay with half-life of ~30 days)
 async function getDriverPerf(dateFrom, dateTo, env) {
   const start = new Date(dateFrom);
   const end = new Date(dateTo);
-  const allResults = [];
+  const chunks = [];
 
+  // Build chunk list oldest → newest
   let cursor = new Date(start);
   while (cursor <= end) {
     const chunkEnd = new Date(cursor);
-    chunkEnd.setDate(chunkEnd.getDate() + 9); // 10-day window
+    chunkEnd.setDate(chunkEnd.getDate() + 9);
     if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    chunks.push({
+      from: cursor.toISOString().slice(0, 10),
+      to: chunkEnd.toISOString().slice(0, 10),
+      midDate: new Date((cursor.getTime() + chunkEnd.getTime()) / 2),
+    });
+    cursor = new Date(chunkEnd);
+    cursor.setDate(cursor.getDate() + 1);
+  }
 
-    const fromStr = cursor.toISOString().slice(0, 10);
-    const toStr = chunkEnd.toISOString().slice(0, 10);
-
+  // Fetch all chunks in parallel
+  const chunkResults = await Promise.all(chunks.map(async chunk => {
     const q = new URLSearchParams({
       company_names: COMPANY,
       location_names: LOCATION,
-      start_date_time: toFleetAIDate(fromStr, false),
-      end_date_time: toFleetAIDate(toStr, true),
+      start_date_time: toFleetAIDate(chunk.from, false),
+      end_date_time: toFleetAIDate(chunk.to, true),
     });
-
     try {
       const data = await netstarGET("/external/drivers/driver-performance-summary?" + q.toString(), env);
       const rows = Array.isArray(data) ? data : (data.data || data.result || []);
-      allResults.push(...rows);
+      return { rows, midDate: chunk.midDate, from: chunk.from, to: chunk.to };
     } catch(e) {
-      // log but continue with other chunks
+      return { rows: [], midDate: chunk.midDate, from: chunk.from, to: chunk.to };
     }
+  }));
 
-    cursor.setDate(cursor.getDate() + 10);
-  }
+  // Assign recency weights — exponential decay, most recent chunk = weight 1.0
+  // Half-life = 30 days: weight = exp(-daysSinceChunk * ln(2) / 30)
+  const now = end;
+  const halfLifeDays = 30;
+  const decay = Math.log(2) / halfLifeDays;
 
-  // Merge rows by registration — sum numeric fields across chunks
+  chunkResults.forEach(chunk => {
+    const daysSince = (now - chunk.midDate) / (1000 * 86400);
+    chunk.weight = Math.exp(-daysSince * decay);
+  });
+
+  // Normalise weights
+  const totalWeight = chunkResults.reduce((s, c) => s + c.weight, 0);
+  chunkResults.forEach(c => c.normWeight = totalWeight > 0 ? c.weight / totalWeight : 1 / chunkResults.length);
+
+  // Collect all driver names across all chunks
+  const driverNames = new Set();
+  chunkResults.forEach(c => c.rows.forEach(r => {
+    const name = String(r.driver_name || r.DriverName || "").trim();
+    if (name) driverNames.add(name);
+  }));
+
+  // For each driver, compute weighted average of event rates (events per 100km)
   const merged = {};
-  for (const row of allResults) {
-    const key = String(row.Registration || row.registration || row.Imei || row.imei || Math.random());
-    if (!merged[key]) {
-      merged[key] = { ...row };
-    } else {
-      // Sum the key numeric fields
-      for (const f of ["DistanceKm","distance_km","Distance","FuelConsumed","fuel_consumed","Fuel",
-                        "TripCount","trip_count","Trips","OffRoadKm","off_road_km",
-                        "OdometerEnd","odometer_end","OdometerStart","odometer_start"]) {
-        if (row[f] != null) merged[key][f] = (parseFloat(merged[key][f]) || 0) + parseFloat(row[f]);
-      }
+  for (const driverName of driverNames) {
+    let totalKm = 0;
+    let weightedHarshBrake = 0, weightedHarshAccel = 0, weightedHarshCorn = 0;
+    let weightedMaxSpd = 0, weightedAvgSpd = 0, weightedDuration = 0;
+    let chunkCount = 0;
+    let latestRow = null;
+
+    for (const chunk of chunkResults) {
+      const row = chunk.rows.find(r => (r.driver_name || r.DriverName || "").toLowerCase() === driverName.toLowerCase());
+      if (!row) continue;
+      const km = parseFloat(row.total_running_km || 0);
+      if (km <= 0) continue;
+
+      // Weight event rates (events per 100km) by recency weight
+      const w = chunk.normWeight;
+      weightedHarshBrake += (parseFloat(row.harsh_breaking || 0) / km * 100) * w;
+      weightedHarshAccel += (parseFloat(row.harsh_acceleration || 0) / km * 100) * w;
+      weightedHarshCorn  += (parseFloat(row.harsh_cornering || 0) / km * 100) * w;
+      weightedMaxSpd     += parseFloat(row.max_speed || 0) * w;
+      weightedAvgSpd     += parseFloat(row.avg_speed || 0) * w;
+      totalKm += km;
+      chunkCount++;
+      latestRow = row;
     }
+
+    if (!latestRow) continue;
+
+    // Convert weighted rates back to absolute event counts based on total km
+    const effectiveKm = totalKm;
+    merged[driverName] = {
+      ...latestRow,
+      driver_name: driverName,
+      total_running_km: effectiveKm,
+      harsh_breaking:    Math.round(weightedHarshBrake * effectiveKm / 100),
+      harsh_acceleration: Math.round(weightedHarshAccel * effectiveKm / 100),
+      harsh_cornering:   Math.round(weightedHarshCorn  * effectiveKm / 100),
+      max_speed:  Math.round(weightedMaxSpd),
+      avg_speed:  Math.round(weightedAvgSpd),
+      // Keep running duration from all chunks summed
+      total_running_duration: latestRow.total_running_duration || "0:00",
+      _chunks: chunkCount,
+      _date_range: chunks[0]?.from + " to " + chunks[chunks.length-1]?.to,
+    };
   }
 
   return Object.values(merged);
