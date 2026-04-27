@@ -267,7 +267,49 @@ export default {
       return corsResponse(JSON.stringify({ status: "ok", worker: "netstar-proxy", timestamp: new Date().toISOString(), key_preview: getKey(env).slice(0,4) + "***" }));
     }
 
-    if (path === "/fleetai/probe") {
+    if (path === "/fleet-scores") {
+      try {
+        const vehicles = await getVehicleList(env);
+        const dateFrom = url.searchParams.get("date_from") || (() => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+        const dateTo = url.searchParams.get("date_to") || (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
+        let driverPerf = [];
+        try { driverPerf = await getDriverPerf(dateFrom, dateTo, env); } catch(e) {}
+        const scored = await Promise.all(vehicles.map(async v => {
+          let status = null;
+          try { status = await getObjectStatus(v.imei, env); } catch(e) {}
+          const statusDriver = String(status?.driver || "").toLowerCase().trim();
+          const perf = driverPerf.find(d => {
+            const pd = String(d.driver_name || "").toLowerCase().trim();
+            return pd && statusDriver && pd === statusDriver;
+          });
+          const km = parseFloat(perf?.total_running_km || 0);
+          const harshBrake = parseInt(perf?.harsh_breaking || 0);
+          const harshAccel = parseInt(perf?.harsh_acceleration || 0);
+          const harshCorn = parseInt(perf?.harsh_cornering || 0);
+          const maxSpd = parseInt(perf?.max_speed || 0);
+          const avgSpd = parseInt(perf?.avg_speed || 0);
+          // Simple risk score 0-100 (lower = safer)
+          const eventScore = Math.min(100, (harshBrake * 3) + (harshAccel * 3) + (harshCorn * 2));
+          const speedPenalty = maxSpd > 130 ? 20 : maxSpd > 110 ? 10 : maxSpd > 100 ? 5 : 0;
+          const rawScore = Math.min(100, eventScore + speedPenalty);
+          const riskScore = Math.round(Math.max(0, 100 - rawScore) * 10) / 10;
+          const lossKm = km || 15000;
+          const lossCost = Math.round(1200 * (Math.exp(rawScore/35) - 0.9) * Math.sqrt(lossKm/15000));
+          const band = rawScore < 20 ? "Excellent" : rawScore < 40 ? "Good" : rawScore < 60 ? "Moderate" : rawScore < 80 ? "High" : "Very High";
+          return {
+            imei: v.imei, registration: v.registration, make: v.make, model: v.model,
+            driver_name: status?.driver || v.driver_name || "Unknown",
+            speed: status?.speed || "0", location: status?.location || "",
+            status: status?.status_hidden || "Unknown",
+            risk_score: riskScore, loss_cost: lossCost, risk_band: band,
+            km_driven: km, harsh_braking: harshBrake, harsh_acceleration: harshAccel,
+            harsh_cornering: harshCorn, max_speed: maxSpd, avg_speed: avgSpd,
+            features: { harsh_breaking: harshBrake, harsh_acceleration: harshAccel, harsh_cornering: harshCorn, max_speed: maxSpd, avg_speed: avgSpd },
+          };
+        }));
+        return corsResponse(JSON.stringify({ vehicles: scored, total: scored.length, date_from: dateFrom, date_to: dateTo }));
+      } catch(e) { return errorResponse(e.message, 502); }
+    }
       return probe(url.searchParams.get("date_from"), url.searchParams.get("date_to"), env);
     }
 
