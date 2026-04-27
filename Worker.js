@@ -267,6 +267,22 @@ export default {
       return corsResponse(JSON.stringify({ status: "ok", worker: "netstar-proxy", timestamp: new Date().toISOString(), key_preview: getKey(env).slice(0,4) + "***" }));
     }
 
+    if (path === "/roi" || path === "/roi.html") {
+      try {
+        const res = await fetch("https://raw.githubusercontent.com/bs5jssxhm2-blip/Netstar-proxy/main/roi.html");
+        const html = await res.text();
+        return new Response(html, { headers: { "Content-Type": "text/html;charset=UTF-8", ...CORS } });
+      } catch(e) { return new Response("Failed to fetch roi.html: " + e.message, { status: 502 }); }
+    }
+
+    if (path === "/driver" || path === "/driver.html") {
+      try {
+        const res = await fetch("https://raw.githubusercontent.com/bs5jssxhm2-blip/Netstar-proxy/main/driver.html");
+        const html = await res.text();
+        return new Response(html, { headers: { "Content-Type": "text/html;charset=UTF-8", ...CORS } });
+      } catch(e) { return new Response("Failed to fetch driver.html: " + e.message, { status: 502 }); }
+    }
+
     if (path === "/fleet-scores" || path === "/driver-score") {
       try {
         const annualKm = parseInt(url.searchParams.get("annual_km") || "15000");
@@ -290,6 +306,13 @@ export default {
           _matched: false,
         }));
 
+        // For /driver-score with imei: resolve driver name from object status
+        let resolvedDriverFilter = driverFilter;
+        if (path === "/driver-score" && imeiFilter) {
+          const os = osMap[imeiFilter];
+          if (os?.driver) resolvedDriverFilter = os.driver.toLowerCase();
+        }
+
         // Step 4: get driver performance — iterate trips by driver
         const list = await getDriverPerf(dateFrom, dateTo, env);
         if (!list.length) throw new Error("No driver data for this period.");
@@ -297,7 +320,7 @@ export default {
         // Step 5: for each perf record, match to vehicle by driver name
         const scored = await Promise.all(list.map(async r => {
           const driverName = r.driver_name || r.driver || "Unknown";
-          if (driverFilter && driverFilter !== driverName.toLowerCase()) return null;
+          if (resolvedDriverFilter && resolvedDriverFilter !== driverName.toLowerCase()) return null;
 
           // Find matching vehicle by driver name
           let mv = null;
@@ -341,6 +364,17 @@ export default {
         const results = scored.filter(Boolean);
         if (path === "/driver-score") return corsResponse(JSON.stringify(results[0] || {}));
         return corsResponse(JSON.stringify({ vehicles: results, total: results.length, date_from: dateFrom, date_to: dateTo }));
+      } catch(e) { return errorResponse(e.message, 502); }
+    }
+
+    if (path === "/live-status") {
+      try {
+        const vlist = await getVehicleList(env);
+        const statuses = await Promise.all(vlist.map(async v => {
+          try { const os = await getObjectStatus(v.imei, env); return Object.assign({}, v, { driver_name: os?.driver || v.driver_name || "Unknown", speed: os?.speed || "0", location: os?.location || "", status: os?.status_hidden || "Unknown", coordinates: os?.coordinates || "" }); }
+          catch(e) { return v; }
+        }));
+        return corsResponse(JSON.stringify({ vehicles: statuses, total: statuses.length, updated: new Date().toISOString() }));
       } catch(e) { return errorResponse(e.message, 502); }
     }
 
