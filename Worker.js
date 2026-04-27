@@ -296,8 +296,7 @@ export default {
     }
 
     if (path === "/" || path === "/index.html") {
-      const rawUrl = env.GITHUB_RAW_URL;
-      if (!rawUrl) return new Response("GITHUB_RAW_URL not configured", { status: 500 });
+      const rawUrl = env.GITHUB_RAW_URL || "https://raw.githubusercontent.com/bs5jssxhm2-blip/Netstar-proxy/main/index.html";
       try {
         const res = await fetch(rawUrl);
         const html = await res.text();
