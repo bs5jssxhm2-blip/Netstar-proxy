@@ -345,7 +345,7 @@ export default {
     if (path === "/fleet-scores" || path === "/driver-score") {
       try {
         const annualKm = parseInt(url.searchParams.get("annual_km") || "15000");
-        const dateFrom = url.searchParams.get("date_from") || url.searchParams.get("start_date") || (() => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+        let dateFrom = url.searchParams.get("date_from") || url.searchParams.get("start_date") || (() => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
         const dateTo = url.searchParams.get("date_to") || url.searchParams.get("end_date") || (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
         const imeiFilter = url.searchParams.get("imei") || "";
         const driverFilter = (url.searchParams.get("driver") || url.searchParams.get("driver_name") || "").toLowerCase();
@@ -372,8 +372,19 @@ export default {
           if (os?.driver) resolvedDriverFilter = os.driver.toLowerCase();
         }
 
-        // Step 4: get driver performance — iterate trips by driver
-        const list = await getDriverPerf(dateFrom, dateTo, env);
+        // Step 4: get driver performance — try requested range, fall back to shorter if no data
+        let list = await getDriverPerf(dateFrom, dateTo, env);
+
+        // If no data returned, try progressively shorter ranges (data retention ~60 days)
+        if (!list.length) {
+          const fallbackDays = [60, 30, 14, 7];
+          for (const days of fallbackDays) {
+            const fallbackFrom = new Date(new Date(dateTo) - days * 86400000).toISOString().slice(0,10);
+            list = await getDriverPerf(fallbackFrom, dateTo, env);
+            if (list.length) { dateFrom = fallbackFrom; break; }
+          }
+        }
+
         if (!list.length) throw new Error("No driver data for this period.");
 
         // Step 5: for each perf record, match to vehicle by driver name
