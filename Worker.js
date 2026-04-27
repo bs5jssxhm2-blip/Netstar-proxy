@@ -64,13 +64,19 @@ async function getVehicleList(env) {
   }));
 }
 
+// Convert yyyy-MM-dd to dd-MM-yyyy HH:mm:ss as required by FleetAI API
+function toFleetAIDate(isoDate, endOfDay = false) {
+  const [y, m, d] = isoDate.split("-");
+  return `${d}-${m}-${y} ${endOfDay ? "23:59:59" : "00:00:01"}`;
+}
+
 // Get driver performance summary for date range
 async function getDriverPerf(dateFrom, dateTo, env) {
   const q = new URLSearchParams({
     company_names: COMPANY,
     location_names: LOCATION,
-    start_date_time: dateFrom + " 00:00:01",
-    end_date_time: dateTo + " 23:59:59",
+    start_date_time: toFleetAIDate(dateFrom, false),
+    end_date_time: toFleetAIDate(dateTo, true),
   });
   const data = await netstarGET("/external/drivers/driver-performance-summary?" + q.toString(), env);
   return Array.isArray(data) ? data : (data.data || data.result || []);
@@ -155,7 +161,7 @@ async function probe(dateFrom, dateTo, env) {
     { url: UBI_BASE + "/vehicle/vehicles", headers: bearerHeaders },
     { url: UBI_BASE + "/driver/drivers", headers: xApiHeaders },
     // Real FleetAI endpoints
-    { url: NETSTAR_BASE + "/external/drivers/driver-performance-summary?company_names=" + COMPANY + "&location_names=" + LOCATION + "&start_date_time=" + from + " 00:00:01&end_date_time=" + to + " 23:59:59", headers: xApiHeaders },
+    { url: NETSTAR_BASE + "/external/drivers/driver-performance-summary?company_names=" + COMPANY + "&location_names=" + LOCATION + "&start_date_time=" + toFleetAIDate(from, false) + "&end_date_time=" + toFleetAIDate(to, true), headers: xApiHeaders },
     { url: NETSTAR_BASE + "/external/reports/object-status?imei=all", headers: xApiHeaders },
     { url: NETSTAR_BASE + "/external/reports/object-status", headers: xApiHeaders },
     // Fallback guesses
