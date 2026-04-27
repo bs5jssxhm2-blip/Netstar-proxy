@@ -162,15 +162,17 @@ async function getDriverPerf(dateFrom, dateTo, env) {
 
     if (!latestRow) continue;
 
-    // Convert weighted rates back to absolute event counts based on total km
-    const effectiveKm = totalKm;
+    // Score directly from weighted rates per 100km (not absolute counts which grow with distance)
+    // Normalise rates to a representative 1000km period for scoring consistency
+    const normKm = 1000;
     merged[driverName] = {
       ...latestRow,
       driver_name: driverName,
-      total_running_km: effectiveKm,
-      harsh_breaking:    Math.round(weightedHarshBrake * effectiveKm / 100),
-      harsh_acceleration: Math.round(weightedHarshAccel * effectiveKm / 100),
-      harsh_cornering:   Math.round(weightedHarshCorn  * effectiveKm / 100),
+      total_running_km: totalKm,
+      // Absolute counts normalised to 1000km for consistent scoring
+      harsh_breaking:    Math.round(weightedHarshBrake * normKm / 100),
+      harsh_acceleration: Math.round(weightedHarshAccel * normKm / 100),
+      harsh_cornering:   Math.round(weightedHarshCorn  * normKm / 100),
       max_speed:  Math.round(weightedMaxSpd),
       avg_speed:  Math.round(weightedAvgSpd),
       // Keep running duration from all chunks summed
@@ -423,9 +425,9 @@ export default {
           const avgSpdPenalty = avgSpd > 80 ? 15 : avgSpd > 70 ? 10 : avgSpd > 60 ? 5 : 0;
           const eventScore = (harshBrake * 3) + (harshAccel * 3) + (harshCorn * 2);
           const rawScore = Math.min(100, eventScore + speedPenalty + avgSpdPenalty);
-          const riskScore = Math.round(Math.min(Math.max(rawScore, 0), 100) * 10) / 10;
+          const riskScore = isNaN(rawScore) ? 50 : Math.round(Math.min(Math.max(rawScore, 0), 100) * 10) / 10;
           const km = parseFloat(r.total_running_km || 0);
-          const lc = Math.round(1200 * (Math.exp(riskScore / 35) - 0.9) * Math.sqrt((km || annualKm) / 15000));
+          const lc = isNaN(riskScore) ? 0 : Math.round(1200 * (Math.exp(riskScore / 35) - 0.9) * Math.sqrt((km || annualKm) / 15000));
           const rb = riskScore < 20 ? "Excellent" : riskScore < 40 ? "Good" : riskScore < 60 ? "Moderate" : riskScore < 80 ? "High" : "Very High";
 
           return {
