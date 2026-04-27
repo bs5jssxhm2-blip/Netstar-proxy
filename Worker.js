@@ -267,47 +267,80 @@ export default {
       return corsResponse(JSON.stringify({ status: "ok", worker: "netstar-proxy", timestamp: new Date().toISOString(), key_preview: getKey(env).slice(0,4) + "***" }));
     }
 
-    if (path === "/fleet-scores") {
+    if (path === "/fleet-scores" || path === "/driver-score") {
       try {
-        const vehicles = await getVehicleList(env);
-        const dateFrom = url.searchParams.get("date_from") || (() => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
-        const dateTo = url.searchParams.get("date_to") || (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
-        let driverPerf = [];
-        try { driverPerf = await getDriverPerf(dateFrom, dateTo, env); } catch(e) {}
-        const scored = await Promise.all(vehicles.map(async v => {
-          let status = null;
-          try { status = await getObjectStatus(v.imei, env); } catch(e) {}
-          const statusDriver = String(status?.driver || "").toLowerCase().trim();
-          const perf = driverPerf.find(d => {
-            const pd = String(d.driver_name || "").toLowerCase().trim();
-            return pd && statusDriver && pd === statusDriver;
-          });
-          const km = parseFloat(perf?.total_running_km || 0);
-          const harshBrake = parseInt(perf?.harsh_breaking || 0);
-          const harshAccel = parseInt(perf?.harsh_acceleration || 0);
-          const harshCorn = parseInt(perf?.harsh_cornering || 0);
-          const maxSpd = parseInt(perf?.max_speed || 0);
-          const avgSpd = parseInt(perf?.avg_speed || 0);
-          // Simple risk score 0-100 (lower = safer)
-          const eventScore = Math.min(100, (harshBrake * 3) + (harshAccel * 3) + (harshCorn * 2));
+        const annualKm = parseInt(url.searchParams.get("annual_km") || "15000");
+        const dateFrom = url.searchParams.get("date_from") || url.searchParams.get("start_date") || (() => { const d = new Date(); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+        const dateTo = url.searchParams.get("date_to") || url.searchParams.get("end_date") || (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
+        const imeiFilter = url.searchParams.get("imei") || "";
+        const driverFilter = (url.searchParams.get("driver") || url.searchParams.get("driver_name") || "").toLowerCase();
+
+        // Step 1: get vehicle list
+        let vlist = await getVehicleList(env);
+
+        // Step 2: fetch ALL object statuses first, keyed by imei
+        const osMap = {};
+        await Promise.all(vlist.map(async v => {
+          try { const os = await getObjectStatus(v.imei, env); if (os) osMap[v.imei] = os; } catch(e) {}
+        }));
+
+        // Step 3: enrich vehicle list with real driver names from object status
+        vlist = vlist.map(v => Object.assign({}, v, {
+          driver_name: osMap[v.imei]?.driver || v.driver_name || "Unknown",
+          _matched: false,
+        }));
+
+        // Step 4: get driver performance — iterate trips by driver
+        const list = await getDriverPerf(dateFrom, dateTo, env);
+        if (!list.length) throw new Error("No driver data for this period.");
+
+        // Step 5: for each perf record, match to vehicle by driver name
+        const scored = await Promise.all(list.map(async r => {
+          const driverName = r.driver_name || r.driver || "Unknown";
+          if (driverFilter && driverFilter !== driverName.toLowerCase()) return null;
+
+          // Find matching vehicle by driver name
+          let mv = null;
+          for (let i = 0; i < vlist.length; i++) {
+            if ((vlist[i].driver_name || "").toLowerCase() === driverName.toLowerCase() && !vlist[i]._matched) {
+              mv = vlist[i]; vlist[i]._matched = true; break;
+            }
+          }
+          // Fallback: first unmatched vehicle
+          if (!mv) { for (let j = 0; j < vlist.length; j++) { if (!vlist[j]._matched) { mv = vlist[j]; vlist[j]._matched = true; break; } } }
+
+          const imei = mv ? mv.imei : "";
+          const os = osMap[imei] || {};
+
+          // Speed penalty from actual max speed in trip data
+          const maxSpd = parseInt(r.max_speed || 0);
           const speedPenalty = maxSpd > 130 ? 20 : maxSpd > 110 ? 10 : maxSpd > 100 ? 5 : 0;
-          const rawScore = Math.min(100, eventScore + speedPenalty);
-          const riskScore = Math.round(Math.max(0, 100 - rawScore) * 10) / 10;
-          const lossKm = km || 15000;
-          const lossCost = Math.round(1200 * (Math.exp(rawScore/35) - 0.9) * Math.sqrt(lossKm/15000));
-          const band = rawScore < 20 ? "Excellent" : rawScore < 40 ? "Good" : rawScore < 60 ? "Moderate" : rawScore < 80 ? "High" : "Very High";
+
+          // Risk score calculation (matches original calcRisk logic)
+          const harshBrake = parseInt(r.harsh_breaking || 0);
+          const harshAccel = parseInt(r.harsh_acceleration || 0);
+          const harshCorn = parseInt(r.harsh_cornering || 0);
+          const avgSpd = parseInt(r.avg_speed || 0);
+          const avgSpdPenalty = avgSpd > 80 ? 15 : avgSpd > 70 ? 10 : avgSpd > 60 ? 5 : 0;
+          const eventScore = (harshBrake * 3) + (harshAccel * 3) + (harshCorn * 2);
+          const rawScore = Math.min(100, eventScore + speedPenalty + avgSpdPenalty);
+          const riskScore = Math.round(Math.min(Math.max(rawScore, 0), 100) * 10) / 10;
+          const km = parseFloat(r.total_running_km || 0);
+          const lc = Math.round(1200 * (Math.exp(riskScore / 35) - 0.9) * Math.sqrt((km || annualKm) / 15000));
+          const rb = riskScore < 20 ? "Excellent" : riskScore < 40 ? "Good" : riskScore < 60 ? "Moderate" : riskScore < 80 ? "High" : "Very High";
+
           return {
-            imei: v.imei, registration: v.registration, make: v.make, model: v.model,
-            driver_name: status?.driver || v.driver_name || "Unknown",
-            speed: status?.speed || "0", location: status?.location || "",
-            status: status?.status_hidden || "Unknown",
-            risk_score: riskScore, loss_cost: lossCost, risk_band: band,
-            km_driven: km, harsh_braking: harshBrake, harsh_acceleration: harshAccel,
-            harsh_cornering: harshCorn, max_speed: maxSpd, avg_speed: avgSpd,
+            imei, driver_name: driverName,
+            registration: mv?.registration || "", make: mv?.make || "", model: mv?.model || "",
+            speed: os.speed || "0", location: os.location || "", status: os.status_hidden || "Unknown",
+            risk_score: riskScore, loss_cost: lc, risk_band: rb, km_driven: km,
             features: { harsh_breaking: harshBrake, harsh_acceleration: harshAccel, harsh_cornering: harshCorn, max_speed: maxSpd, avg_speed: avgSpd },
           };
         }));
-        return corsResponse(JSON.stringify({ vehicles: scored, total: scored.length, date_from: dateFrom, date_to: dateTo }));
+
+        const results = scored.filter(Boolean);
+        if (path === "/driver-score") return corsResponse(JSON.stringify(results[0] || {}));
+        return corsResponse(JSON.stringify({ vehicles: results, total: results.length, date_from: dateFrom, date_to: dateTo }));
       } catch(e) { return errorResponse(e.message, 502); }
     }
 
