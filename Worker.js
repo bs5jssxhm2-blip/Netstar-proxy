@@ -143,22 +143,22 @@ async function ftcSummary(dateFrom, dateTo, env) {
 
     // Step 3: enrich each vehicle with trip data and object status
     const enriched = await Promise.all(vehicles.map(async v => {
-      // Match driver perf by driver name (API returns driver_name not registration)
-      const perf = driverPerf.find(d => {
-        const perfDriver = String(d.driver_name || d.DriverName || "").toLowerCase().trim();
-        const vehDriver = String(v.driver_name || "").toLowerCase().trim();
-        const perfReg = String(d.Registration || d.registration || "").toLowerCase();
-        const vehReg = String(v.registration || "").toLowerCase();
-        return (perfDriver && vehDriver && perfDriver === vehDriver) ||
-               (perfReg && vehReg && perfReg === vehReg) ||
-               String(d.Imei || d.imei || "") === v.imei;
-      });
-
-      // Get live object status
+      // Get live object status FIRST — we need driver name from it for matching
       let status = null;
       if (v.imei) {
         try { status = await getObjectStatus(v.imei, env); } catch(e) {}
       }
+
+      // Match driver perf by driver name — use status driver name as it's most reliable
+      const statusDriver = String(status?.driver || v.driver_name || "").toLowerCase().trim();
+      const perf = driverPerf.find(d => {
+        const perfDriver = String(d.driver_name || d.DriverName || "").toLowerCase().trim();
+        const perfReg = String(d.Registration || d.registration || "").toLowerCase();
+        const vehReg = String(v.registration || "").toLowerCase();
+        return (perfDriver && statusDriver && perfDriver === statusDriver) ||
+               (perfReg && vehReg && perfReg === vehReg) ||
+               String(d.Imei || d.imei || "") === v.imei;
+      });
 
       // Real API fields from driver performance summary:
       // total_running_km, total_running_duration, avg_speed, max_speed, harsh_breaking etc.
@@ -201,6 +201,8 @@ async function ftcSummary(dateFrom, dateTo, env) {
       source_endpoint: UBI_BASE + "/vehicle/vehicles",
       date_from: dateFrom,
       date_to: dateTo,
+      driver_perf_count: driverPerf.length,
+      driver_perf_names: driverPerf.map(d => d.driver_name || d.DriverName || "?"),
       vehicles: enriched,
     }), 200);
 
