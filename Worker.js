@@ -72,24 +72,19 @@ function toFleetAIDate(isoDate, endOfDay = false) {
   return `${d}-${m}-${y} ${endOfDay ? "23:59:59" : "00:00:01"}`;
 }
 
-// Get driver performance — API enforces 10-day max window, so chunk and compute weighted rolling average
-// More recent chunks carry higher weight (exponential decay with half-life of ~30 days)
+// Get driver performance — API enforces 10-day max window, so chunk and sum
+// Simple approach: sum raw events and km across all chunks, score on event rate per 100km
 async function getDriverPerf(dateFrom, dateTo, env) {
   const start = new Date(dateFrom);
   const end = new Date(dateTo);
   const chunks = [];
 
-  // Build chunk list oldest → newest
   let cursor = new Date(start);
   while (cursor <= end) {
     const chunkEnd = new Date(cursor);
     chunkEnd.setDate(chunkEnd.getDate() + 9);
     if (chunkEnd > end) chunkEnd.setTime(end.getTime());
-    chunks.push({
-      from: cursor.toISOString().slice(0, 10),
-      to: chunkEnd.toISOString().slice(0, 10),
-      midDate: new Date((cursor.getTime() + chunkEnd.getTime()) / 2),
-    });
+    chunks.push({ from: cursor.toISOString().slice(0, 10), to: chunkEnd.toISOString().slice(0, 10) });
     cursor = new Date(chunkEnd);
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -104,85 +99,57 @@ async function getDriverPerf(dateFrom, dateTo, env) {
     });
     try {
       const data = await netstarGET("/external/drivers/driver-performance-summary?" + q.toString(), env);
-      const rows = Array.isArray(data) ? data : (data.data || data.result || []);
-      return { rows, midDate: chunk.midDate, from: chunk.from, to: chunk.to };
-    } catch(e) {
-      return { rows: [], midDate: chunk.midDate, from: chunk.from, to: chunk.to };
-    }
+      return Array.isArray(data) ? data : (data.data || data.result || []);
+    } catch(e) { return []; }
   }));
 
-  // Assign recency weights — exponential decay, most recent chunk = weight 1.0
-  // Half-life = 30 days: weight = exp(-daysSinceChunk * ln(2) / 30)
-  const now = end;
-  const halfLifeDays = 30;
-  const decay = Math.log(2) / halfLifeDays;
-
-  chunkResults.forEach(chunk => {
-    const daysSince = (now - chunk.midDate) / (1000 * 86400);
-    chunk.weight = Math.exp(-daysSince * decay);
-  });
-
-  // Normalise weights
-  const totalWeight = chunkResults.reduce((s, c) => s + c.weight, 0);
-  chunkResults.forEach(c => c.normWeight = totalWeight > 0 ? c.weight / totalWeight : 1 / chunkResults.length);
-
-  // Collect all driver names across all chunks
-  const driverNames = new Set();
-  chunkResults.forEach(c => c.rows.forEach(r => {
-    const name = String(r.driver_name || r.DriverName || "").trim();
-    if (name) driverNames.add(name);
-  }));
-
-  // For each driver, compute weighted average of event rates (events per 100km)
+  // Sum raw events and km per driver across all chunks
   const merged = {};
-  for (const driverName of driverNames) {
-    let totalKm = 0;
-    let weightedHarshBrake = 0, weightedHarshAccel = 0, weightedHarshCorn = 0;
-    let weightedMaxSpd = 0, weightedAvgSpd = 0, weightedDuration = 0;
-    let chunkCount = 0;
-    let latestRow = null;
-
-    for (const chunk of chunkResults) {
-      const row = chunk.rows.find(r => (r.driver_name || r.DriverName || "").toLowerCase() === driverName.toLowerCase());
-      if (!row) continue;
-      const km = parseFloat(row.total_running_km || 0);
-      if (km <= 0) continue;
-
-      // Weight event rates (events per 100km) by recency weight
-      const w = chunk.normWeight;
-      weightedHarshBrake += (parseFloat(row.harsh_breaking || 0) / km * 100) * w;
-      weightedHarshAccel += (parseFloat(row.harsh_acceleration || 0) / km * 100) * w;
-      weightedHarshCorn  += (parseFloat(row.harsh_cornering || 0) / km * 100) * w;
-      weightedMaxSpd     += parseFloat(row.max_speed || 0) * w;
-      weightedAvgSpd     += parseFloat(row.avg_speed || 0) * w;
-      totalKm += km;
-      chunkCount++;
-      latestRow = row;
+  for (const rows of chunkResults) {
+    for (const row of rows) {
+      const key = String(row.driver_name || row.DriverName || "").trim();
+      if (!key) continue;
+      if (!merged[key]) {
+        merged[key] = { ...row, _chunkCount: 1 };
+      } else {
+        merged[key]._chunkCount++;
+        for (const f of ["total_running_km","harsh_breaking","harsh_acceleration","harsh_cornering","over_speed","night_drive","idling","non_stop_drive"]) {
+          merged[key][f] = (parseFloat(merged[key][f]) || 0) + (parseFloat(row[f]) || 0);
+        }
+        // Keep highest max speed seen
+        if ((parseFloat(row.max_speed) || 0) > (parseFloat(merged[key].max_speed) || 0)) {
+          merged[key].max_speed = row.max_speed;
+        }
+        // Average the avg_speed
+        merged[key].avg_speed = ((parseFloat(merged[key].avg_speed) || 0) * (merged[key]._chunkCount - 1) + (parseFloat(row.avg_speed) || 0)) / merged[key]._chunkCount;
+        // Sum duration strings (just keep latest for display)
+        merged[key].total_running_duration = row.total_running_duration || merged[key].total_running_duration;
+      }
     }
-
-    if (!latestRow) continue;
-
-    // Score directly from weighted rates per 100km (not absolute counts which grow with distance)
-    // Normalise rates to a representative 1000km period for scoring consistency
-    const normKm = 1000;
-    merged[driverName] = {
-      ...latestRow,
-      driver_name: driverName,
-      total_running_km: totalKm,
-      // Absolute counts normalised to 1000km for consistent scoring
-      harsh_breaking:    Math.round(weightedHarshBrake * normKm / 100),
-      harsh_acceleration: Math.round(weightedHarshAccel * normKm / 100),
-      harsh_cornering:   Math.round(weightedHarshCorn  * normKm / 100),
-      max_speed:  Math.round(weightedMaxSpd),
-      avg_speed:  Math.round(weightedAvgSpd),
-      // Keep running duration from all chunks summed
-      total_running_duration: latestRow.total_running_duration || "0:00",
-      _chunks: chunkCount,
-      _date_range: chunks[0]?.from + " to " + chunks[chunks.length-1]?.to,
-    };
   }
 
-  return Object.values(merged);
+  // Convert to event rates per 100km for consistent scoring regardless of period length
+  return Object.values(merged).map(r => {
+    const km = parseFloat(r.total_running_km) || 0;
+    if (km <= 0) return r;
+    // Normalise event counts to per-100km rate, then scale to equivalent 500km period
+    // This makes a 10-day and 60-day score directly comparable
+    const norm = 500;
+    return {
+      ...r,
+      total_running_km: km, // keep real km for display
+      harsh_breaking:    Math.round((parseFloat(r.harsh_breaking) || 0) / km * norm),
+      harsh_acceleration: Math.round((parseFloat(r.harsh_acceleration) || 0) / km * norm),
+      harsh_cornering:   Math.round((parseFloat(r.harsh_cornering) || 0) / km * norm),
+      over_speed:        Math.round((parseFloat(r.over_speed) || 0) / km * norm),
+      night_drive:       Math.round((parseFloat(r.night_drive) || 0) / km * norm),
+      idling:            Math.round((parseFloat(r.idling) || 0) / km * norm),
+      avg_speed:         Math.round(parseFloat(r.avg_speed) || 0),
+      _normalised: true,
+      _norm_km: norm,
+      _chunks: r._chunkCount,
+    };
+  });
 }
 
 // Get object status (odometer, fuel, speed) by IMEI
