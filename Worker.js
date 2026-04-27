@@ -143,17 +143,36 @@ async function ftcSummary(dateFrom, dateTo, env) {
 
     // Step 3: enrich each vehicle with trip data and object status
     const enriched = await Promise.all(vehicles.map(async v => {
-      // Match driver perf by registration or name
-      const perf = driverPerf.find(d =>
-        String(d.Registration || d.registration || "").toLowerCase() === v.registration.toLowerCase() ||
-        String(d.Imei || d.imei || "") === v.imei
-      );
+      // Match driver perf by driver name (API returns driver_name not registration)
+      const perf = driverPerf.find(d => {
+        const perfDriver = String(d.driver_name || d.DriverName || "").toLowerCase().trim();
+        const vehDriver = String(v.driver_name || "").toLowerCase().trim();
+        const perfReg = String(d.Registration || d.registration || "").toLowerCase();
+        const vehReg = String(v.registration || "").toLowerCase();
+        return (perfDriver && vehDriver && perfDriver === vehDriver) ||
+               (perfReg && vehReg && perfReg === vehReg) ||
+               String(d.Imei || d.imei || "") === v.imei;
+      });
 
       // Get live object status
       let status = null;
       if (v.imei) {
         try { status = await getObjectStatus(v.imei, env); } catch(e) {}
       }
+
+      // Real API fields from driver performance summary:
+      // total_running_km, total_running_duration, avg_speed, max_speed, harsh_breaking etc.
+      // No fuel field — estimate from km using typical diesel consumption
+      const roadKm = parseFloat(perf?.total_running_km || perf?.DistanceKm || perf?.distance_km || perf?.Distance || 0);
+      const offroadKm = parseFloat(perf?.OffRoadKm || perf?.off_road_km || 0);
+
+      // Estimate fuel: diesel ~10L/100km for light vehicles, ~12L/100km for heavy
+      // Use yesterday_odometer delta if available, otherwise estimate
+      const estFuelPer100km = 11; // conservative fleet average
+      const fuelLitres = parseFloat(perf?.FuelConsumed || perf?.fuel_consumed || perf?.Fuel || 0) ||
+                         (roadKm + offroadKm > 0 ? ((roadKm + offroadKm) * estFuelPer100km / 100) : 0);
+
+      const yesterdayOdom = parseFloat(status?.yesterday_odometer || 0);
 
       return {
         vehicle_id: v.id,
@@ -163,13 +182,14 @@ async function ftcSummary(dateFrom, dateTo, env) {
         year: v.year,
         gvm_kg: v.gvm_kg,
         fuel_type: v.fuel_type,
-        driver: v.driver_name,
-        odometer_start: parseFloat(perf?.OdometerStart || perf?.odometer_start || status?.OdomStart || 0),
-        odometer_end: parseFloat(perf?.OdometerEnd || perf?.odometer_end || status?.Odometer || 0),
-        fuel_litres: parseFloat(perf?.FuelConsumed || perf?.fuel_consumed || perf?.Fuel || 0),
-        road_km: parseFloat(perf?.DistanceKm || perf?.distance_km || perf?.Distance || 0),
-        offroad_km: parseFloat(perf?.OffRoadKm || perf?.off_road_km || 0),
+        driver: perf?.driver_name || perf?.DriverName || v.driver_name,
+        odometer_start: parseFloat(perf?.OdometerStart || perf?.odometer_start || 0),
+        odometer_end: parseFloat(perf?.OdometerEnd || perf?.odometer_end || yesterdayOdom || 0),
+        fuel_litres: +fuelLitres.toFixed(1),
+        road_km: roadKm,
+        offroad_km: offroadKm,
         trips: parseInt(perf?.TripCount || perf?.trip_count || perf?.Trips || 0),
+        fuel_estimated: fuelLitres > 0 && !(perf?.FuelConsumed || perf?.fuel_consumed),
         period: new Date(dateFrom).toLocaleDateString("en-AU", { month: "short", year: "numeric" }),
         source: "fleetai",
         _perf: perf,
