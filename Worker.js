@@ -373,19 +373,25 @@ export default {
         }
 
         // Step 4: get driver performance — try requested range, fall back to shorter if no data
+        // Cap at 60 days max since FleetAI retains ~60 days
+        const maxDays = 60;
+        const requestedDays = Math.round((new Date(dateTo) - new Date(dateFrom)) / 86400000);
+        if (requestedDays > maxDays) {
+          dateFrom = new Date(new Date(dateTo) - maxDays * 86400000).toISOString().slice(0, 10);
+        }
+
         let list = await getDriverPerf(dateFrom, dateTo, env);
 
-        // If no data returned, try progressively shorter ranges (data retention ~60 days)
+        // If no data, try progressively shorter recent windows
         if (!list.length) {
-          const fallbackDays = [60, 30, 14, 7];
-          for (const days of fallbackDays) {
-            const fallbackFrom = new Date(new Date(dateTo) - days * 86400000).toISOString().slice(0,10);
-            list = await getDriverPerf(fallbackFrom, dateTo, env);
-            if (list.length) { dateFrom = fallbackFrom; break; }
+          for (const days of [30, 14, 7]) {
+            const fb = new Date(new Date(dateTo) - days * 86400000).toISOString().slice(0, 10);
+            list = await getDriverPerf(fb, dateTo, env);
+            if (list.length) { dateFrom = fb; break; }
           }
         }
 
-        if (!list.length) throw new Error("No driver data for this period.");
+        if (!list.length) throw new Error("No driver data for this period. Try a date range within the last 30 days.");
 
         // Step 5: for each perf record, match to vehicle by driver name
         const scored = await Promise.all(list.map(async r => {
