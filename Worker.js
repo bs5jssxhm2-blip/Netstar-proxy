@@ -39,10 +39,10 @@ function errorResponse(msg, status = 500) {
 }
 
 // UBI API — vehicle list
-async function ubiGET(path, env) {
+async function ubiGET(path, env, key) {
   const res = await fetch(UBI_BASE + path, {
     method: "GET",
-    headers: { "x-api-key": apiKey || getKey(env), "Accept": "application/json" },
+    headers: { "x-api-key": key || getKey(env), "Accept": "application/json" },
   });
   const text = await res.text();
   if (!res.ok) throw new Error("UBI " + res.status + ": " + text.slice(0, 200));
@@ -50,10 +50,10 @@ async function ubiGET(path, env) {
 }
 
 // FleetAI API — trip/driver performance data
-async function netstarGET(path, env) {
+async function netstarGET(path, env, key) {
   const res = await fetch(NETSTAR_BASE + path, {
     method: "GET",
-    headers: { "x-api-key": apiKey || getKey(env), "Accept": "application/json" },
+    headers: { "x-api-key": key || getKey(env), "Accept": "application/json" },
   });
   const text = await res.text();
   if (!res.ok) throw new Error("FleetAI " + res.status + ": " + text.slice(0, 200));
@@ -61,8 +61,8 @@ async function netstarGET(path, env) {
 }
 
 // Get vehicle list from UBI API
-async function getVehicleList(env) {
-  const data = await ubiGET("/vehicle/vehicles", env);
+async function getVehicleList(env, key) {
+  const data = await ubiGET("/vehicle/vehicles", env, key);
   const list = Array.isArray(data) ? data : (data.data || []);
   return list.map(v => ({
     imei: String(v.Imei || v.imei || ""),
@@ -85,7 +85,7 @@ function toFleetAIDate(isoDate, endOfDay = false) {
 
 // Get driver performance — API enforces 10-day max window, so chunk and sum
 // Simple approach: sum raw events and km across all chunks, score on event rate per 100km
-async function getDriverPerf(dateFrom, dateTo, env) {
+async function getDriverPerf(dateFrom, dateTo, env, key) {
   const start = new Date(dateFrom);
   const end = new Date(dateTo);
   const chunks = [];
@@ -109,7 +109,7 @@ async function getDriverPerf(dateFrom, dateTo, env) {
       end_date_time: toFleetAIDate(chunk.to, true),
     });
     try {
-      const data = await netstarGET("/external/drivers/driver-performance-summary?" + q.toString(), env);
+      const data = await netstarGET("/external/drivers/driver-performance-summary?" + q.toString(), env, key);
       return Array.isArray(data) ? data : (data.data || data.result || []);
     } catch(e) { return []; }
   }));
@@ -164,7 +164,7 @@ async function getDriverPerf(dateFrom, dateTo, env) {
 }
 
 // Get object status (odometer, fuel, speed) by IMEI
-async function getObjectStatus(imei, env) {
+async function getObjectStatus(imei, env, key) {
   const data = await netstarGET("/external/reports/object-status?imei=" + imei, env);
   const list = Array.isArray(data) ? data : (data.data || []);
   return list.length > 0 ? list[0] : null;
@@ -174,18 +174,18 @@ async function getObjectStatus(imei, env) {
 async function ftcSummary(dateFrom, dateTo, env) {
   try {
     // Step 1: get vehicle list
-    const vehicles = await getVehicleList(env);
+    const vehicles = await getVehicleList(env, apiKey);
 
     // Step 2: get driver performance for the period
     let driverPerf = [];
-    try { driverPerf = await getDriverPerf(dateFrom, dateTo, env); } catch(e) {}
+    try { driverPerf = await getDriverPerf(dateFrom, dateTo, env, apiKey); } catch(e) {}
 
     // Step 3: enrich each vehicle with trip data and object status
     const enriched = await Promise.all(vehicles.map(async v => {
       // Get live object status FIRST — we need driver name from it for matching
       let status = null;
       if (v.imei) {
-        try { status = await getObjectStatus(v.imei, env); } catch(e) {}
+        try { status = await getObjectStatus(v.imei, env, apiKey); } catch(e) {}
       }
 
       // Match driver perf by driver name — use status driver name as it's most reliable
@@ -334,12 +334,12 @@ export default {
         const driverFilter = (url.searchParams.get("driver") || url.searchParams.get("driver_name") || "").toLowerCase();
 
         // Step 1: get vehicle list
-        let vlist = await getVehicleList(env);
+        let vlist = await getVehicleList(env, apiKey);
 
         // Step 2: fetch ALL object statuses first, keyed by imei
         const osMap = {};
         await Promise.all(vlist.map(async v => {
-          try { const os = await getObjectStatus(v.imei, env); if (os) osMap[v.imei] = os; } catch(e) {}
+          try { const os = await getObjectStatus(v.imei, env, apiKey); if (os) osMap[v.imei] = os; } catch(e) {}
         }));
 
         // Step 3: enrich vehicle list with real driver names from object status
@@ -363,13 +363,13 @@ export default {
           dateFrom = new Date(new Date(dateTo) - maxDays * 86400000).toISOString().slice(0, 10);
         }
 
-        let list = await getDriverPerf(dateFrom, dateTo, env);
+        let list = await getDriverPerf(dateFrom, dateTo, env, apiKey);
 
         // If no data, try progressively shorter recent windows
         if (!list.length) {
           for (const days of [30, 14, 7]) {
             const fb = new Date(new Date(dateTo) - days * 86400000).toISOString().slice(0, 10);
-            list = await getDriverPerf(fb, dateTo, env);
+            list = await getDriverPerf(fb, dateTo, env, apiKey);
             if (list.length) { dateFrom = fb; break; }
           }
         }
@@ -444,9 +444,9 @@ export default {
 
     if (path === "/live-status") {
       try {
-        const vlist = await getVehicleList(env);
+        const vlist = await getVehicleList(env, apiKey);
         const statuses = await Promise.all(vlist.map(async v => {
-          try { const os = await getObjectStatus(v.imei, env); return Object.assign({}, v, { driver_name: os?.driver || v.driver_name || "Unknown", speed: os?.speed || "0", location: os?.location || "", status: os?.status_hidden || "Unknown", coordinates: os?.coordinates || "" }); }
+          try { const os = await getObjectStatus(v.imei, env, apiKey); return Object.assign({}, v, { driver_name: os?.driver || v.driver_name || "Unknown", speed: os?.speed || "0", location: os?.location || "", status: os?.status_hidden || "Unknown", coordinates: os?.coordinates || "" }); }
           catch(e) { return v; }
         }));
         return corsResponse(JSON.stringify({ vehicles: statuses, total: statuses.length, updated: new Date().toISOString() }));
@@ -466,7 +466,7 @@ export default {
 
     if (path === "/fleetai/vehicles") {
       try {
-        const vehicles = await getVehicleList(env);
+        const vehicles = await getVehicleList(env, apiKey);
         return corsResponse(JSON.stringify({ vehicles, total: vehicles.length }));
       } catch(e) { return errorResponse(e.message, 502); }
     }
@@ -476,7 +476,7 @@ export default {
       const dateTo = url.searchParams.get("date_to");
       if (!dateFrom || !dateTo) return errorResponse("Missing date_from / date_to", 400);
       try {
-        const data = await getDriverPerf(dateFrom, dateTo, env);
+        const data = await getDriverPerf(dateFrom, dateTo, env, apiKey);
         return corsResponse(JSON.stringify(data));
       } catch(e) { return errorResponse(e.message, 502); }
     }
