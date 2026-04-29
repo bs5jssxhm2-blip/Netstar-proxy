@@ -171,21 +171,21 @@ async function getObjectStatus(imei, env, key) {
 }
 
 // FTC summary — combines vehicles + trip data into one payload
-async function ftcSummary(dateFrom, dateTo, env) {
+async function ftcSummary(dateFrom, dateTo, env, key) {
   try {
     // Step 1: get vehicle list
-    const vehicles = await getVehicleList(env, apiKey);
+    const vehicles = await getVehicleList(env, key);
 
     // Step 2: get driver performance for the period
     let driverPerf = [];
-    try { driverPerf = await getDriverPerf(dateFrom, dateTo, env, apiKey); } catch(e) {}
+    try { driverPerf = await getDriverPerf(dateFrom, dateTo, env, key); } catch(e) {}
 
     // Step 3: enrich each vehicle with trip data and object status
     const enriched = await Promise.all(vehicles.map(async v => {
       // Get live object status FIRST — we need driver name from it for matching
       let status = null;
       if (v.imei) {
-        try { status = await getObjectStatus(v.imei, env, apiKey); } catch(e) {}
+        try { status = await getObjectStatus(v.imei, env, key); } catch(e) {}
       }
 
       // Match driver perf by driver name — use status driver name as it's most reliable
@@ -466,7 +466,7 @@ export default {
 
     if (path === "/fleetai/vehicles") {
       try {
-        const vehicles = await getVehicleList(env, apiKey);
+        const vehicles = await getVehicleList(env, key);
         return corsResponse(JSON.stringify({ vehicles, total: vehicles.length }));
       } catch(e) { return errorResponse(e.message, 502); }
     }
