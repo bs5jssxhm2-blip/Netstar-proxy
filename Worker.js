@@ -62,35 +62,35 @@ async function netstarGET(path, env, key) {
 
 // Get vehicle list from UBI API
 async function getVehicleList(env, key, companyName) {
-  // Try FleetAI company-vehicles POST endpoint first (matches Rick's working curl)
   let list = [];
-  
-  // Try with company_name and company_names (Rick's format)
-  const bodies = [
-    { company_name: companyName || "", company_names: companyName ? [companyName] : [] },
-    { company_names: companyName ? [companyName] : [] },
-    {},
-  ];
 
-  for (const body of bodies) {
-    try {
-      const res = await fetch(NETSTAR_BASE + "/external/company-vehicles", {
-        method: "POST",
-        headers: { "x-api-key": key || getKey(env), "Content-Type": "application/json", "Accept": "*/*" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) continue;
+  try {
+    const res = await fetch(NETSTAR_BASE + "/external/company-vehicles", {
+      method: "POST",
+      headers: { "x-api-key": key || getKey(env), "Content-Type": "application/json", "Accept": "*/*" },
+      body: JSON.stringify({ company_name: companyName || "", company_names: companyName ? [companyName] : [] }),
+    });
+    if (res.ok) {
       const data = await res.json();
-      const found = Array.isArray(data) ? data :
-        Array.isArray(data?.data) ? data.data :
-        Array.isArray(data?.vehicles) ? data.vehicles :
-        Array.isArray(data?.result) ? data.result :
-        Array.isArray(data?.content) ? data.content :
-        Array.isArray(data?.items) ? data.items :
-        (typeof data === 'object' && data !== null ? (Object.values(data).find(v => Array.isArray(v) && v.length > 0) || []) : []);
-      if (found.length > 0) { list = found; break; }
-    } catch(e) { continue; }
-  }
+      // Response structure: { result:1, data: { branch: [ { branch_name, vehicles: [...] } ] } }
+      if (data?.data?.branch && Array.isArray(data.data.branch)) {
+        for (const branch of data.data.branch) {
+          if (Array.isArray(branch.vehicles)) {
+            for (const v of branch.vehicles) {
+              list.push({ ...v, _branch: branch.branch_name });
+            }
+          }
+        }
+      } else {
+        // Try flat array formats
+        const flat = Array.isArray(data) ? data :
+          Array.isArray(data?.data) ? data.data :
+          Array.isArray(data?.vehicles) ? data.vehicles :
+          Array.isArray(data?.result) ? data.result : [];
+        list = flat;
+      }
+    }
+  } catch(e) {}
 
   // Fallback to UBI endpoint for demo account
   if (list.length === 0) {
@@ -104,17 +104,29 @@ async function getVehicleList(env, key, companyName) {
 }
 
 function mapVehicles(list) {
-  return list.map(v => ({
-    imei: String(v.Imei || v.imei || v.IMEI || v.device_id || ""),
-    id: String(v.Imei || v.imei || v.IMEI || v.device_id || ""),
-    registration: v.Registration || v.registration || v.PlateNumber || v.plate_number || v.reg || v.Imei || "",
-    make: v.Make || v.make || v.Brand || v.brand || "—",
-    model: v.Model || v.model || "—",
-    year: v.Year || v.year || null,
-    driver_name: v.DriverName || v.driver_name || v.Driver || v.driver || "—",
-    gvm_kg: parseFloat(v.GvmKg || v.gvm_kg || v.Gvm || v.gvm || 0) || 0,
-    fuel_type: (v.FuelType || v.fuel_type || "diesel").toLowerCase(),
-  }));
+  return list.filter(v => v && !v._debug).map(v => {
+    // Lake Macquarie format: device_name, imei_no, vehicle_no, _branch
+    // Demo format: Imei, Registration, Make, Model etc.
+    const imei = String(v.imei_no || v.Imei || v.imei || v.IMEI || v.device_id || "");
+    // vehicle_no contains "663401 Shane Sykes" — first token is likely rego
+    const vehicleNo = v.vehicle_no || v.device_name || "";
+    const regMatch = vehicleNo.match(/^([A-Z0-9]+)/);
+    const registration = v.Registration || v.registration || v.PlateNumber || v.plate_number || (regMatch ? regMatch[1] : vehicleNo) || imei;
+    // Driver name from vehicle_no — everything after the first token
+    const driverFromVehicleNo = vehicleNo.includes(" ") ? vehicleNo.replace(/^\S+\s+/, "") : "";
+    return {
+      imei,
+      id: imei,
+      registration,
+      make: v.Make || v.make || v.Brand || v.brand || v.device_model || "—",
+      model: v.Model || v.model || "—",
+      year: v.Year || v.year || null,
+      driver_name: v.DriverName || v.driver_name || v.Driver || v.driver || driverFromVehicleNo || "—",
+      gvm_kg: parseFloat(v.GvmKg || v.gvm_kg || v.Gvm || v.gvm || 0) || 0,
+      fuel_type: (v.FuelType || v.fuel_type || "diesel").toLowerCase(),
+      branch: v._branch || "",
+    };
+  });
 }
 
 // Convert yyyy-MM-dd to dd-MM-yyyy HH:mm:ss as required by FleetAI API
