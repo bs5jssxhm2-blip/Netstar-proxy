@@ -85,7 +85,12 @@ async function getVehicleList(env, key, companyName) {
     }));
   }
   const data = await res.json();
-  const list = Array.isArray(data) ? data : (data.data || data.vehicles || data.result || []);
+  const list = Array.isArray(data) ? data : 
+    Array.isArray(data.data) ? data.data :
+    Array.isArray(data.vehicles) ? data.vehicles :
+    Array.isArray(data.result) ? data.result :
+    Array.isArray(data.content) ? data.content :
+    Object.values(data).find(v => Array.isArray(v)) || [];
   return list.map(v => ({
     imei: String(v.Imei || v.imei || v.IMEI || ""),
     id: String(v.Imei || v.imei || v.IMEI || ""),
@@ -259,7 +264,7 @@ async function ftcSummary(dateFrom, dateTo, env, key) {
     }));
 
     return corsResponse(JSON.stringify({
-      source_endpoint: UBI_BASE + "/vehicle/vehicles",
+      source_endpoint: NETSTAR_BASE + "/external/company-vehicles",
       date_from: dateFrom,
       date_to: dateTo,
       driver_perf_count: driverPerf.length,
