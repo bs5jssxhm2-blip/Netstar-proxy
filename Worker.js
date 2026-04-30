@@ -61,19 +61,41 @@ async function netstarGET(path, env, key) {
 }
 
 // Get vehicle list from UBI API
-async function getVehicleList(env, key) {
-  const data = await ubiGET("/vehicle/vehicles", env, key);
-  const list = Array.isArray(data) ? data : (data.data || []);
+async function getVehicleList(env, key, companyName) {
+  // FleetAI company-vehicles endpoint (POST) — works for all customers
+  const res = await fetch(NETSTAR_BASE + "/external/company-vehicles", {
+    method: "POST",
+    headers: { "x-api-key": key || getKey(env), "Content-Type": "application/json", "Accept": "application/json" },
+    body: JSON.stringify({ company_names: companyName ? [companyName] : [] }),
+  });
+  if (!res.ok) {
+    // Fallback to UBI vehicles endpoint for demo account
+    const data = await ubiGET("/vehicle/vehicles", env, key);
+    const list = Array.isArray(data) ? data : (data.data || []);
+    return list.map(v => ({
+      imei: String(v.Imei || v.imei || ""),
+      id: String(v.Imei || v.imei || ""),
+      registration: v.Registration || v.registration || v.Imei || "",
+      make: v.Make || v.make || "—",
+      model: v.Model || v.model || "—",
+      year: v.Year || v.year || null,
+      driver_name: v.DriverName || v.driver_name || v.Driver || "—",
+      gvm_kg: parseFloat(v.GvmKg || v.gvm_kg || v.Gvm || 0) || 0,
+      fuel_type: (v.FuelType || v.fuel_type || "diesel").toLowerCase(),
+    }));
+  }
+  const data = await res.json();
+  const list = Array.isArray(data) ? data : (data.data || data.vehicles || data.result || []);
   return list.map(v => ({
-    imei: String(v.Imei || v.imei || ""),
-    id: String(v.Imei || v.imei || ""),
-    registration: v.Registration || v.registration || v.Imei || "",
-    make: v.Make || v.make || "—",
+    imei: String(v.Imei || v.imei || v.IMEI || ""),
+    id: String(v.Imei || v.imei || v.IMEI || ""),
+    registration: v.Registration || v.registration || v.PlateNumber || v.plate_number || v.Imei || "",
+    make: v.Make || v.make || v.Brand || v.brand || "—",
     model: v.Model || v.model || "—",
     year: v.Year || v.year || null,
-    driver_name: v.DriverName || v.driver_name || v.Driver || "—",
-    gvm_kg: parseFloat(v.GvmKg || v.gvm_kg || v.Gvm || 0) || 0,
-    fuel_type: (v.FuelType || v.fuel_type || "diesel").toLowerCase(),
+    driver_name: v.DriverName || v.driver_name || v.Driver || v.driver || "—",
+    gvm_kg: parseFloat(v.GvmKg || v.gvm_kg || v.Gvm || v.gvm || 0) || 0,
+    fuel_type: (v.FuelType || v.fuel_type || v.FuelType || "diesel").toLowerCase(),
   }));
 }
 
@@ -104,7 +126,7 @@ async function getDriverPerf(dateFrom, dateTo, env, key) {
   const chunkResults = await Promise.all(chunks.map(async chunk => {
     const q = new URLSearchParams({
       company_names: (typeof clientMeta !== "undefined" ? clientMeta.company : COMPANY),
-      location_names: (typeof clientMeta !== "undefined" ? clientMeta.location : LOCATION),
+      location_names: (clientMeta && clientMeta.location !== clientMeta.company) ? clientMeta.location : "",
       start_date_time: toFleetAIDate(chunk.from, false),
       end_date_time: toFleetAIDate(chunk.to, true),
     });
@@ -334,7 +356,7 @@ export default {
         const driverFilter = (url.searchParams.get("driver") || url.searchParams.get("driver_name") || "").toLowerCase();
 
         // Step 1: get vehicle list
-        let vlist = await getVehicleList(env, apiKey);
+        let vlist = await getVehicleList(env, apiKey, clientMeta.company);
 
         // Step 2: fetch ALL object statuses first, keyed by imei
         const osMap = {};
@@ -444,7 +466,7 @@ export default {
 
     if (path === "/live-status") {
       try {
-        const vlist = await getVehicleList(env, apiKey);
+        const vlist = await getVehicleList(env, apiKey, clientMeta.company);
         const statuses = await Promise.all(vlist.map(async v => {
           try { const os = await getObjectStatus(v.imei, env, apiKey); return Object.assign({}, v, { driver_name: os?.driver || v.driver_name || "Unknown", speed: os?.speed || "0", location: os?.location || "", status: os?.status_hidden || "Unknown", coordinates: os?.coordinates || "" }); }
           catch(e) { return v; }
