@@ -63,6 +63,7 @@ async function netstarGET(path, env, key) {
 // Get vehicle list from UBI API
 async function getVehicleList(env, key, companyName) {
   let list = [];
+  let branches = [];
 
   try {
     const res = await fetch(NETSTAR_BASE + "/external/company-vehicles", {
@@ -72,9 +73,9 @@ async function getVehicleList(env, key, companyName) {
     });
     if (res.ok) {
       const data = await res.json();
-      // Response structure: { result:1, data: { branch: [ { branch_name, vehicles: [...] } ] } }
       if (data?.data?.branch && Array.isArray(data.data.branch)) {
         for (const branch of data.data.branch) {
+          if (branch.branch_name) branches.push(branch.branch_name);
           if (Array.isArray(branch.vehicles)) {
             for (const v of branch.vehicles) {
               list.push({ ...v, _branch: branch.branch_name });
@@ -82,7 +83,6 @@ async function getVehicleList(env, key, companyName) {
           }
         }
       } else {
-        // Try flat array formats
         const flat = Array.isArray(data) ? data :
           Array.isArray(data?.data) ? data.data :
           Array.isArray(data?.vehicles) ? data.vehicles :
@@ -100,7 +100,10 @@ async function getVehicleList(env, key, companyName) {
     } catch(e) {}
   }
 
-  return mapVehicles(list);
+  const mapped = mapVehicles(list);
+  // Attach branch list to result for use by getDriverPerf
+  mapped._branches = branches;
+  return mapped;
 }
 
 function mapVehicles(list) {
@@ -137,7 +140,7 @@ function toFleetAIDate(isoDate, endOfDay = false) {
 
 // Get driver performance — API enforces 10-day max window, so chunk and sum
 // Simple approach: sum raw events and km across all chunks, score on event rate per 100km
-async function getDriverPerf(dateFrom, dateTo, env, key, companyName) {
+async function getDriverPerf(dateFrom, dateTo, env, key, companyName, branches) {
   const start = new Date(dateFrom);
   const end = new Date(dateTo);
   const chunks = [];
@@ -159,9 +162,27 @@ async function getDriverPerf(dateFrom, dateTo, env, key, companyName) {
       start_date_time: toFleetAIDate(chunk.from, false),
       end_date_time: toFleetAIDate(chunk.to, true),
     });
+    // If we have branches, try each one and merge results
+    const locationNames = (branches && branches.length > 0) ? branches : [LOCATION];
     try {
-      const data = await netstarGET("/external/drivers/driver-performance-summary?" + q.toString(), env, key);
-      return Array.isArray(data) ? data : (data.data || data.result || []);
+      let chunkData = [];
+      for (const loc of locationNames) {
+        const qWithLoc = new URLSearchParams(q);
+        qWithLoc.set("location_names", loc);
+        try {
+          const data = await netstarGET("/external/drivers/driver-performance-summary?" + qWithLoc.toString(), env, key);
+          const rows = Array.isArray(data) ? data : (data.data || data.result || []);
+          chunkData.push(...rows);
+        } catch(e) {}
+      }
+      // Deduplicate by driver_name
+      const seen = new Set();
+      return chunkData.filter(r => {
+        const k = (r.driver_name || r.DriverName || "").toLowerCase();
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
     } catch(e) { return []; }
   }));
 
@@ -225,12 +246,13 @@ async function getObjectStatus(imei, env, key) {
 async function ftcSummary(dateFrom, dateTo, env, key, clientMeta) {
   try {
     const companyName = clientMeta?.company || COMPANY;
-    // Step 1: get vehicle list
+    // Step 1: get vehicle list (also returns branch names)
     const vehicles = await getVehicleList(env, key, companyName);
+    const branches = vehicles._branches || [];
 
     // Step 2: get driver performance for the period
     let driverPerf = [];
-    try { driverPerf = await getDriverPerf(dateFrom, dateTo, env, key, companyName); } catch(e) {}
+    try { driverPerf = await getDriverPerf(dateFrom, dateTo, env, key, companyName, branches); } catch(e) {}
 
     // Step 3: enrich each vehicle with trip data and object status
     const enriched = await Promise.all(vehicles.map(async v => {
@@ -511,8 +533,10 @@ export default {
       const ak = getKey(env, ck);
       const from = url.searchParams.get("date_from") || "2026-04-28";
       const to = url.searchParams.get("date_to") || "2026-04-29";
+      const loc = url.searchParams.get("location") || "CW - CBS - Building Services";
       const q = new URLSearchParams({
         company_names: cm.company,
+        location_names: loc,
         start_date_time: toFleetAIDate(from, false),
         end_date_time: toFleetAIDate(to, true),
       });
