@@ -62,45 +62,54 @@ async function netstarGET(path, env, key) {
 
 // Get vehicle list from UBI API
 async function getVehicleList(env, key, companyName) {
-  // FleetAI company-vehicles endpoint (POST) — works for all customers
+  // FleetAI company-vehicles endpoint (POST)
   const res = await fetch(NETSTAR_BASE + "/external/company-vehicles", {
     method: "POST",
     headers: { "x-api-key": key || getKey(env), "Content-Type": "application/json", "Accept": "application/json" },
     body: JSON.stringify({ company_names: companyName ? [companyName] : [] }),
   });
-  if (!res.ok) {
-    // Fallback to UBI vehicles endpoint for demo account
-    const data = await ubiGET("/vehicle/vehicles", env, key);
-    const list = Array.isArray(data) ? data : (data.data || []);
-    return list.map(v => ({
-      imei: String(v.Imei || v.imei || ""),
-      id: String(v.Imei || v.imei || ""),
-      registration: v.Registration || v.registration || v.Imei || "",
-      make: v.Make || v.make || "—",
-      model: v.Model || v.model || "—",
-      year: v.Year || v.year || null,
-      driver_name: v.DriverName || v.driver_name || v.Driver || "—",
-      gvm_kg: parseFloat(v.GvmKg || v.gvm_kg || v.Gvm || 0) || 0,
-      fuel_type: (v.FuelType || v.fuel_type || "diesel").toLowerCase(),
-    }));
+  const raw = await res.text();
+  // Store raw for debugging
+  let data;
+  try { data = JSON.parse(raw); } catch(e) { data = raw; }
+
+  // If POST failed or empty, try UBI fallback
+  if (!res.ok || !data || (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0)) {
+    try {
+      const ubiData = await ubiGET("/vehicle/vehicles", env, key);
+      const ubiList = Array.isArray(ubiData) ? ubiData : (ubiData.data || []);
+      if (ubiList.length > 0) return mapVehicles(ubiList);
+    } catch(e) {}
   }
-  const data = await res.json();
-  const list = Array.isArray(data) ? data : 
-    Array.isArray(data.data) ? data.data :
-    Array.isArray(data.vehicles) ? data.vehicles :
-    Array.isArray(data.result) ? data.result :
-    Array.isArray(data.content) ? data.content :
-    Object.values(data).find(v => Array.isArray(v)) || [];
+
+  // Parse all possible response shapes
+  const list = Array.isArray(data) ? data :
+    Array.isArray(data?.data) ? data.data :
+    Array.isArray(data?.vehicles) ? data.vehicles :
+    Array.isArray(data?.result) ? data.result :
+    Array.isArray(data?.content) ? data.content :
+    Array.isArray(data?.items) ? data.items :
+    (typeof data === 'object' && data !== null ? (Object.values(data).find(v => Array.isArray(v)) || []) : []);
+
+  // If still empty, return debug info so we can see the raw response
+  if (list.length === 0) {
+    return [{ _debug: true, _raw: typeof raw === 'string' ? raw.slice(0, 500) : JSON.stringify(data).slice(0, 500), _status: res.status }];
+  }
+
+  return mapVehicles(list);
+}
+
+function mapVehicles(list) {
   return list.map(v => ({
-    imei: String(v.Imei || v.imei || v.IMEI || ""),
-    id: String(v.Imei || v.imei || v.IMEI || ""),
-    registration: v.Registration || v.registration || v.PlateNumber || v.plate_number || v.Imei || "",
+    imei: String(v.Imei || v.imei || v.IMEI || v.device_id || ""),
+    id: String(v.Imei || v.imei || v.IMEI || v.device_id || ""),
+    registration: v.Registration || v.registration || v.PlateNumber || v.plate_number || v.reg || v.Imei || "",
     make: v.Make || v.make || v.Brand || v.brand || "—",
     model: v.Model || v.model || "—",
     year: v.Year || v.year || null,
     driver_name: v.DriverName || v.driver_name || v.Driver || v.driver || "—",
     gvm_kg: parseFloat(v.GvmKg || v.gvm_kg || v.Gvm || v.gvm || 0) || 0,
-    fuel_type: (v.FuelType || v.fuel_type || v.FuelType || "diesel").toLowerCase(),
+    fuel_type: (v.FuelType || v.fuel_type || "diesel").toLowerCase(),
   }));
 }
 
