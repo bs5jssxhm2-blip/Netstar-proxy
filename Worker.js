@@ -505,6 +505,28 @@ export default {
       } catch(e) { return errorResponse(e.message, 502); }
     }
 
+    if (path === "/fleetai/perf-probe") {
+      const ck = url.searchParams.get("client") || "demo";
+      const cm = getClientMeta(ck);
+      const ak = getKey(env, ck);
+      const from = url.searchParams.get("date_from") || "2026-04-28";
+      const to = url.searchParams.get("date_to") || "2026-04-29";
+      const q = new URLSearchParams({
+        company_names: cm.company,
+        start_date_time: toFleetAIDate(from, false),
+        end_date_time: toFleetAIDate(to, true),
+      });
+      try {
+        const res = await fetch(NETSTAR_BASE + "/external/drivers/driver-performance-summary?" + q.toString(), {
+          headers: { "x-api-key": ak, "Accept": "application/json" }
+        });
+        const text = await res.text();
+        return corsResponse(JSON.stringify({ status: res.status, query: q.toString(), response: text.slice(0, 2000) }));
+      } catch(e) {
+        return corsResponse(JSON.stringify({ error: e.message }));
+      }
+    }
+
     if (path === "/fleetai/vehicles-probe") {
       const ck = url.searchParams.get("client") || "demo";
       const cm = getClientMeta(ck);
