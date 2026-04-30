@@ -162,32 +162,31 @@ async function getDriverPerf(dateFrom, dateTo, env, key, companyName, branches) 
       start_date_time: toFleetAIDate(chunk.from, false),
       end_date_time: toFleetAIDate(chunk.to, true),
     });
-    // If we have branches, try each one and merge results
+    // Fetch all branches in PARALLEL to avoid Worker timeout
     const locationNames = (branches && branches.length > 0) ? branches : [LOCATION];
     try {
-      let chunkData = [];
-      for (const loc of locationNames) {
+      const branchResults = await Promise.all(locationNames.map(async loc => {
         const qWithLoc = new URLSearchParams(q);
         qWithLoc.set("location_names", loc);
         try {
           const data = await netstarGET("/external/drivers/driver-performance-summary?" + qWithLoc.toString(), env, key);
-          const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : (data.result || []);
-          chunkData.push(...rows);
-        } catch(e) {}
-      }
-      // Deduplicate by driver_name — also strip leading asset numbers (e.g. "717702 Tony Robb" -> "Tony Robb")
-      const seen = new Set();
-      return chunkData.map(r => {
+          return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : (data.result || []);
+        } catch(e) { return []; }
+      }));
+      const chunkData = branchResults.flat();
+      // Deduplicate — strip leading asset numbers, keep highest km record
+      const byDriver = {};
+      for (const r of chunkData) {
         const raw = r.driver_name || r.DriverName || "";
-        // Strip leading numeric asset ID if present (e.g. "717702 Tony Robb")
         const clean = raw.replace(/^\d+\s+/, "").trim();
-        return { ...r, driver_name: clean, _raw_driver_name: raw };
-      }).filter(r => {
-        const k = (r.driver_name || "").toLowerCase();
-        if (!k || seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
+        const dKey = clean.toLowerCase();
+        if (!dKey) continue;
+        const km = parseFloat(r.total_running_km || 0);
+        if (!byDriver[dKey] || km > parseFloat(byDriver[dKey].total_running_km || 0)) {
+          byDriver[dKey] = { ...r, driver_name: clean, _raw_driver_name: raw };
+        }
+      }
+      return Object.values(byDriver);
     } catch(e) { return []; }
   }));
 
