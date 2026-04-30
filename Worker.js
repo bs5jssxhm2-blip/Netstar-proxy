@@ -137,7 +137,7 @@ function toFleetAIDate(isoDate, endOfDay = false) {
 
 // Get driver performance — API enforces 10-day max window, so chunk and sum
 // Simple approach: sum raw events and km across all chunks, score on event rate per 100km
-async function getDriverPerf(dateFrom, dateTo, env, key) {
+async function getDriverPerf(dateFrom, dateTo, env, key, companyName) {
   const start = new Date(dateFrom);
   const end = new Date(dateTo);
   const chunks = [];
@@ -155,8 +155,8 @@ async function getDriverPerf(dateFrom, dateTo, env, key) {
   // Fetch all chunks in parallel
   const chunkResults = await Promise.all(chunks.map(async chunk => {
     const q = new URLSearchParams({
-      company_names: (typeof clientMeta !== "undefined" ? clientMeta.company : COMPANY),
-      location_names: (clientMeta && clientMeta.location !== clientMeta.company) ? clientMeta.location : "",
+      company_names: companyName || COMPANY,
+      location_names: "",
       start_date_time: toFleetAIDate(chunk.from, false),
       end_date_time: toFleetAIDate(chunk.to, true),
     });
@@ -231,7 +231,7 @@ async function ftcSummary(dateFrom, dateTo, env, key, clientMeta) {
 
     // Step 2: get driver performance for the period
     let driverPerf = [];
-    try { driverPerf = await getDriverPerf(dateFrom, dateTo, env, key); } catch(e) {}
+    try { driverPerf = await getDriverPerf(dateFrom, dateTo, env, key, companyName); } catch(e) {}
 
     // Step 3: enrich each vehicle with trip data and object status
     const enriched = await Promise.all(vehicles.map(async v => {
@@ -416,13 +416,13 @@ export default {
           dateFrom = new Date(new Date(dateTo) - maxDays * 86400000).toISOString().slice(0, 10);
         }
 
-        let list = await getDriverPerf(dateFrom, dateTo, env, apiKey);
+        let list = await getDriverPerf(dateFrom, dateTo, env, apiKey, clientMeta.company);
 
         // If no data, try progressively shorter recent windows
         if (!list.length) {
           for (const days of [30, 14, 7]) {
             const fb = new Date(new Date(dateTo) - days * 86400000).toISOString().slice(0, 10);
-            list = await getDriverPerf(fb, dateTo, env, apiKey);
+            list = await getDriverPerf(fb, dateTo, env, apiKey, clientMeta.company);
             if (list.length) { dateFrom = fb; break; }
           }
         }
@@ -543,7 +543,7 @@ export default {
       const dateTo = url.searchParams.get("date_to");
       if (!dateFrom || !dateTo) return errorResponse("Missing date_from / date_to", 400);
       try {
-        const data = await getDriverPerf(dateFrom, dateTo, env, apiKey);
+        const data = await getDriverPerf(dateFrom, dateTo, env, apiKey, clientMeta.company);
         return corsResponse(JSON.stringify(data));
       } catch(e) { return errorResponse(e.message, 502); }
     }
