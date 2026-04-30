@@ -223,10 +223,11 @@ async function getObjectStatus(imei, env, key) {
 }
 
 // FTC summary — combines vehicles + trip data into one payload
-async function ftcSummary(dateFrom, dateTo, env, key) {
+async function ftcSummary(dateFrom, dateTo, env, key, clientMeta) {
   try {
+    const companyName = clientMeta?.company || COMPANY;
     // Step 1: get vehicle list
-    const vehicles = await getVehicleList(env, key);
+    const vehicles = await getVehicleList(env, key, companyName);
 
     // Step 2: get driver performance for the period
     let driverPerf = [];
@@ -527,7 +528,7 @@ export default {
       const dateFrom = url.searchParams.get("date_from") || url.searchParams.get("from");
       const dateTo = url.searchParams.get("date_to") || url.searchParams.get("to");
       if (!dateFrom || !dateTo) return errorResponse("Missing date_from and date_to (YYYY-MM-DD)", 400);
-      return ftcSummary(dateFrom, dateTo, env);
+      return ftcSummary(dateFrom, dateTo, env, apiKey, clientMeta);
     }
 
     if (path === "/fleetai/vehicles") {
