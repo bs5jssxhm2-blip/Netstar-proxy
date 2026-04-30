@@ -373,6 +373,35 @@ async function probe(dateFrom, dateTo, env) {
   }, null, 2));
 }
 
+// Customer credentials — username:password per client
+const CUSTOMER_CREDENTIALS = {
+  "lakemacquarie": { username: "lmcc", password: "Netstar2026!" },
+};
+
+function checkAuth(request, clientId) {
+  const creds = CUSTOMER_CREDENTIALS[clientId];
+  if (!creds) return true; // No auth required for demo
+  const authHeader = request.headers.get("Authorization") || "";
+  if (!authHeader.startsWith("Basic ")) return false;
+  try {
+    const decoded = atob(authHeader.slice(6));
+    const [user, ...passParts] = decoded.split(":");
+    const pass = passParts.join(":");
+    return user === creds.username && pass === creds.password;
+  } catch(e) { return false; }
+}
+
+function authChallenge(clientId) {
+  const meta = CUSTOMER_META[clientId] || { company: "Netstar" };
+  return new Response("Unauthorised", {
+    status: 401,
+    headers: {
+      "WWW-Authenticate": `Basic realm="${meta.company} FTC Portal"`,
+      "Content-Type": "text/plain",
+    }
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -382,6 +411,11 @@ export default {
     const apiKey = getKey(env, clientId);
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+
+    // Auth check for customer-facing pages
+    if (clientId !== "demo" && (path === "/ftc" || path === "/" || path === "/roi")) {
+      if (!checkAuth(request, clientId)) return authChallenge(clientId);
+    }
 
     if (path === "/health") {
       return corsResponse(JSON.stringify({ status: "ok", worker: "netstar-proxy", timestamp: new Date().toISOString(), key_preview: getKey(env).slice(0,4) + "***" }));
