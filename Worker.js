@@ -171,15 +171,20 @@ async function getDriverPerf(dateFrom, dateTo, env, key, companyName, branches) 
         qWithLoc.set("location_names", loc);
         try {
           const data = await netstarGET("/external/drivers/driver-performance-summary?" + qWithLoc.toString(), env, key);
-          const rows = Array.isArray(data) ? data : (data.data || data.result || []);
+          const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : (data.result || []);
           chunkData.push(...rows);
         } catch(e) {}
       }
-      // Deduplicate by driver_name
+      // Deduplicate by driver_name — also strip leading asset numbers (e.g. "717702 Tony Robb" -> "Tony Robb")
       const seen = new Set();
-      return chunkData.filter(r => {
-        const k = (r.driver_name || r.DriverName || "").toLowerCase();
-        if (seen.has(k)) return false;
+      return chunkData.map(r => {
+        const raw = r.driver_name || r.DriverName || "";
+        // Strip leading numeric asset ID if present (e.g. "717702 Tony Robb")
+        const clean = raw.replace(/^\d+\s+/, "").trim();
+        return { ...r, driver_name: clean, _raw_driver_name: raw };
+      }).filter(r => {
+        const k = (r.driver_name || "").toLowerCase();
+        if (!k || seen.has(k)) return false;
         seen.add(k);
         return true;
       });
