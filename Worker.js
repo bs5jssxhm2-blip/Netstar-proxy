@@ -156,7 +156,6 @@ async function getDriverPerf(dateFrom, dateTo, env, key, companyName) {
   const chunkResults = await Promise.all(chunks.map(async chunk => {
     const q = new URLSearchParams({
       company_names: companyName || COMPANY,
-      location_names: "",
       start_date_time: toFleetAIDate(chunk.from, false),
       end_date_time: toFleetAIDate(chunk.to, true),
     });
@@ -317,7 +316,7 @@ async function probe(dateFrom, dateTo, env) {
     { url: UBI_BASE + "/vehicle/vehicles", headers: bearerHeaders },
     { url: UBI_BASE + "/driver/drivers", headers: xApiHeaders },
     // Real FleetAI endpoints
-    { url: NETSTAR_BASE + "/external/drivers/driver-performance-summary?company_names=" + COMPANY + "&location_names=" + LOCATION + "&start_date_time=" + toFleetAIDate(from, false) + "&end_date_time=" + toFleetAIDate(to, true), headers: xApiHeaders },
+    { url: NETSTAR_BASE + "/external/drivers/driver-performance-summary?company_names=" + COMPANY + "&start_date_time=" + toFleetAIDate(from, false) + "&end_date_time=" + toFleetAIDate(to, true), headers: xApiHeaders },
     { url: NETSTAR_BASE + "/external/reports/object-status?imei=all", headers: xApiHeaders },
     { url: NETSTAR_BASE + "/external/reports/object-status", headers: xApiHeaders },
     // Fallback guesses
