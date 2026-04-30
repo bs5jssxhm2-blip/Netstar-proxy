@@ -62,38 +62,42 @@ async function netstarGET(path, env, key) {
 
 // Get vehicle list from UBI API
 async function getVehicleList(env, key, companyName) {
-  // FleetAI company-vehicles endpoint (POST)
-  const res = await fetch(NETSTAR_BASE + "/external/company-vehicles", {
-    method: "POST",
-    headers: { "x-api-key": key || getKey(env), "Content-Type": "application/json", "Accept": "application/json" },
-    body: JSON.stringify({ company_names: companyName ? [companyName] : [] }),
-  });
-  const raw = await res.text();
-  // Store raw for debugging
-  let data;
-  try { data = JSON.parse(raw); } catch(e) { data = raw; }
+  // Try FleetAI company-vehicles POST endpoint first (matches Rick's working curl)
+  let list = [];
+  
+  // Try with company_name and company_names (Rick's format)
+  const bodies = [
+    { company_name: companyName || "", company_names: companyName ? [companyName] : [] },
+    { company_names: companyName ? [companyName] : [] },
+    {},
+  ];
 
-  // If POST failed or empty, try UBI fallback
-  if (!res.ok || !data || (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0)) {
+  for (const body of bodies) {
     try {
-      const ubiData = await ubiGET("/vehicle/vehicles", env, key);
-      const ubiList = Array.isArray(ubiData) ? ubiData : (ubiData.data || []);
-      if (ubiList.length > 0) return mapVehicles(ubiList);
-    } catch(e) {}
+      const res = await fetch(NETSTAR_BASE + "/external/company-vehicles", {
+        method: "POST",
+        headers: { "x-api-key": key || getKey(env), "Content-Type": "application/json", "Accept": "*/*" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const found = Array.isArray(data) ? data :
+        Array.isArray(data?.data) ? data.data :
+        Array.isArray(data?.vehicles) ? data.vehicles :
+        Array.isArray(data?.result) ? data.result :
+        Array.isArray(data?.content) ? data.content :
+        Array.isArray(data?.items) ? data.items :
+        (typeof data === 'object' && data !== null ? (Object.values(data).find(v => Array.isArray(v) && v.length > 0) || []) : []);
+      if (found.length > 0) { list = found; break; }
+    } catch(e) { continue; }
   }
 
-  // Parse all possible response shapes
-  const list = Array.isArray(data) ? data :
-    Array.isArray(data?.data) ? data.data :
-    Array.isArray(data?.vehicles) ? data.vehicles :
-    Array.isArray(data?.result) ? data.result :
-    Array.isArray(data?.content) ? data.content :
-    Array.isArray(data?.items) ? data.items :
-    (typeof data === 'object' && data !== null ? (Object.values(data).find(v => Array.isArray(v)) || []) : []);
-
-  // If still empty, return debug info so we can see the raw response
+  // Fallback to UBI endpoint for demo account
   if (list.length === 0) {
-    return [{ _debug: true, _raw: typeof raw === 'string' ? raw.slice(0, 500) : JSON.stringify(data).slice(0, 500), _status: res.status }];
+    try {
+      const data = await ubiGET("/vehicle/vehicles", env, key);
+      list = Array.isArray(data) ? data : (data.data || []);
+    } catch(e) {}
   }
 
   return mapVehicles(list);
@@ -487,6 +491,20 @@ export default {
         }));
         return corsResponse(JSON.stringify({ vehicles: statuses, total: statuses.length, updated: new Date().toISOString() }));
       } catch(e) { return errorResponse(e.message, 502); }
+    }
+
+    if (path === "/fleetai/vehicles-probe") {
+      const ck = url.searchParams.get("client") || "demo";
+      const cm = getClientMeta(ck);
+      const ak = getKey(env, ck);
+      const body = { company_name: cm.company, company_names: [cm.company] };
+      const res = await fetch(NETSTAR_BASE + "/external/company-vehicles", {
+        method: "POST",
+        headers: { "x-api-key": ak, "Content-Type": "application/json", "Accept": "*/*" },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      return corsResponse(JSON.stringify({ status: res.status, body_sent: body, response: text.slice(0, 2000) }));
     }
 
     if (path === "/fleetai/probe") {
