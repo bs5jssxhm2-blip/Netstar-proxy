@@ -152,8 +152,13 @@ async function getDriverPerf(dateFrom, dateTo, env, key, companyName, branches) 
     end_date_time: toFleetAIDate(dateTo, true),
   });
   const locationNames = (branches && branches.length > 0) ? branches : [LOCATION];
-  try {
-    const branchResults = await Promise.all(locationNames.map(async loc => {
+
+  // Batch branches into groups of 6 to avoid Worker timeout (26 parallel = too many)
+  const BATCH = 6;
+  const allRows = [];
+  for (let i = 0; i < locationNames.length; i += BATCH) {
+    const batch = locationNames.slice(i, i + BATCH);
+    const batchResults = await Promise.all(batch.map(async loc => {
       const qWithLoc = new URLSearchParams(q);
       qWithLoc.set("location_names", loc);
       try {
@@ -161,20 +166,22 @@ async function getDriverPerf(dateFrom, dateTo, env, key, companyName, branches) 
         return Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : (data.result || []);
       } catch(e) { return []; }
     }));
-    const chunkData = branchResults.flat();
-    const byDriver = {};
-    for (const r of chunkData) {
-      const raw = r.driver_name || r.DriverName || "";
-      const clean = raw.replace(/^\d+\s+/, "").trim();
-      const dKey = clean.toLowerCase();
-      if (!dKey) continue;
-      const km = parseFloat(r.total_running_km || 0);
-      if (!byDriver[dKey] || km > parseFloat(byDriver[dKey].total_running_km || 0)) {
-        byDriver[dKey] = { ...r, driver_name: clean, _raw_driver_name: raw };
-      }
+    allRows.push(...batchResults.flat());
+  }
+
+  // Deduplicate — strip leading asset numbers, keep highest km record
+  const byDriver = {};
+  for (const r of allRows) {
+    const raw = r.driver_name || r.DriverName || "";
+    const clean = raw.replace(/^\d+\s+/, "").trim();
+    const dKey = raw.toLowerCase(); // key by raw name to preserve asset number for matching
+    if (!dKey) continue;
+    const km = parseFloat(r.total_running_km || 0);
+    if (!byDriver[dKey] || km > parseFloat(byDriver[dKey].total_running_km || 0)) {
+      byDriver[dKey] = { ...r, driver_name: clean, _raw_driver_name: raw };
     }
-    return Object.values(byDriver);
-  } catch(e) { return []; }
+  }
+  return Object.values(byDriver);
 }
 
 
