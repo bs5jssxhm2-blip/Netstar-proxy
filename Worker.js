@@ -557,9 +557,13 @@ export default {
         const res = await fetch(fullUrl, {
           headers: { "x-api-key": ak, "Accept": "application/json" },
         });
-        const data = await res.json();
-        const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
-        return corsResponse(JSON.stringify({ location: loc, count: rows.length, data: rows, _url: fullUrl, _status: res.status }));
+        const text = await res.text();
+        let rows = [];
+        try {
+          const data = JSON.parse(text);
+          rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+        } catch(pe) { rows = []; }
+        return corsResponse(JSON.stringify({ location: loc, count: rows.length, data: rows, _status: res.status, _len: text.length }));
       } catch(e) { return corsResponse(JSON.stringify({ location: loc, count: 0, data: [], error: e.message })); }
     }
 
