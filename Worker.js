@@ -197,38 +197,26 @@ async function ftcSummary(dateFrom, dateTo, env, key, clientMeta) {
     let driverPerf = [];
     try { driverPerf = await getDriverPerf(dateFrom, dateTo, env, key, companyName, branches); } catch(e) {}
 
-    // Step 3: enrich each vehicle with trip data and object status
-    const enriched = await Promise.all(vehicles.map(async v => {
-      // Get live object status FIRST — we need driver name from it for matching
-      let status = null;
-      if (v.imei) {
-        try { status = await getObjectStatus(v.imei, env, key); } catch(e) {}
-      }
+    // Step 3: enrich each vehicle with trip data
+    // Match strategy: perf raw_driver_name starts with vehicle registration (asset number)
+    // e.g. vehicle reg "745001" matches perf "_raw_driver_name" "745001 Lester Gay"
+    const enriched = vehicles.map(v => {
+      const vReg = String(v.registration || "").trim().toLowerCase();
 
-      // Match driver perf by driver name — use status driver name as it's most reliable
-      const statusDriver = String(status?.driver || v.driver_name || "").toLowerCase().trim();
       const perf = driverPerf.find(d => {
-        const perfDriver = String(d.driver_name || d.DriverName || "").toLowerCase().trim();
-        const perfReg = String(d.Registration || d.registration || "").toLowerCase();
-        const vehReg = String(v.registration || "").toLowerCase();
-        return (perfDriver && statusDriver && perfDriver === statusDriver) ||
-               (perfReg && vehReg && perfReg === vehReg) ||
-               String(d.Imei || d.imei || "") === v.imei;
+        // Primary: raw driver name starts with vehicle registration (asset number match)
+        const rawDriver = String(d._raw_driver_name || d.driver_name || "").trim();
+        if (vReg && rawDriver.toLowerCase().startsWith(vReg)) return true;
+        // Secondary: cleaned driver name matches vehicle driver name
+        const perfDriver = String(d.driver_name || "").toLowerCase().trim();
+        const vehDriver = String(v.driver_name || "").toLowerCase().trim();
+        if (perfDriver && vehDriver && perfDriver.length > 2 && perfDriver === vehDriver) return true;
+        return false;
       });
 
-      // Real API fields from driver performance summary:
-      // total_running_km, total_running_duration, avg_speed, max_speed, harsh_breaking etc.
-      // No fuel field — estimate from km using typical diesel consumption
-      const roadKm = parseFloat(perf?.total_running_km || perf?.DistanceKm || perf?.distance_km || perf?.Distance || 0);
+      const roadKm = parseFloat(perf?.total_running_km || 0);
       const offroadKm = parseFloat(perf?.OffRoadKm || perf?.off_road_km || 0);
-
-      // Estimate fuel: diesel ~10L/100km for light vehicles, ~12L/100km for heavy
-      // Use yesterday_odometer delta if available, otherwise estimate
-      const estFuelPer100km = 11; // conservative fleet average
-      const fuelLitres = parseFloat(perf?.FuelConsumed || perf?.fuel_consumed || perf?.Fuel || 0) ||
-                         (roadKm + offroadKm > 0 ? ((roadKm + offroadKm) * estFuelPer100km / 100) : 0);
-
-      const yesterdayOdom = parseFloat(status?.yesterday_odometer || 0);
+      const fuelLitres = roadKm + offroadKm > 0 ? +((roadKm + offroadKm) * 11 / 100).toFixed(1) : 0;
 
       return {
         vehicle_id: v.id,
@@ -238,20 +226,21 @@ async function ftcSummary(dateFrom, dateTo, env, key, clientMeta) {
         year: v.year,
         gvm_kg: v.gvm_kg,
         fuel_type: v.fuel_type,
-        driver: perf?.driver_name || perf?.DriverName || v.driver_name,
-        odometer_start: parseFloat(perf?.OdometerStart || perf?.odometer_start || 0),
-        odometer_end: parseFloat(perf?.OdometerEnd || perf?.odometer_end || yesterdayOdom || 0),
-        fuel_litres: +fuelLitres.toFixed(1),
+        driver: perf?.driver_name || v.driver_name,
+        branch: perf?.branch_name || v.branch || "Not Assigned",
+        odometer_start: 0,
+        odometer_end: 0,
+        fuel_litres: fuelLitres,
         road_km: roadKm,
         offroad_km: offroadKm,
-        trips: parseInt(perf?.TripCount || perf?.trip_count || perf?.Trips || 0),
-        fuel_estimated: fuelLitres > 0 && !(perf?.FuelConsumed || perf?.fuel_consumed),
+        trips: 0,
+        fuel_estimated: fuelLitres > 0,
         period: new Date(dateFrom).toLocaleDateString("en-AU", { month: "short", year: "numeric" }),
         source: "fleetai",
         _perf: perf,
-        _status: status,
+        _status: null,
       };
-    }));
+    });
 
     return corsResponse(JSON.stringify({
       source_endpoint: NETSTAR_BASE + "/external/company-vehicles",
