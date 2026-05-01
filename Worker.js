@@ -527,6 +527,42 @@ export default {
       } catch(e) { return errorResponse(e.message, 502); }
     }
 
+    if (path === "/fleetai/match-debug") {
+      const ck = url.searchParams.get("client") || "demo";
+      const cm = getClientMeta(ck);
+      const ak = getKey(env, ck);
+      const from = url.searchParams.get("date_from") || "2026-04-24";
+      const to   = url.searchParams.get("date_to")   || "2026-04-30";
+      try {
+        const vehicles = await getVehicleList(env, ak, cm.company);
+        const branches = vehicles._branches || [];
+        const driverPerf = await getDriverPerf(from, to, env, ak, cm.company, branches);
+        const matched = [], unmatched = [];
+        for (const v of vehicles.slice(0, 30)) {
+          const vReg = String(v.registration || "").trim().toLowerCase();
+          const perf = driverPerf.find(d => {
+            const raw = String(d._raw_driver_name || d.driver_name || "").trim();
+            if (vReg && raw.toLowerCase().startsWith(vReg)) return true;
+            const perfDriver = String(d.driver_name || "").toLowerCase().trim();
+            const vehDriver  = String(v.driver_name || "").toLowerCase().trim();
+            return perfDriver && vehDriver && perfDriver.length > 2 && perfDriver === vehDriver;
+          });
+          if (perf) matched.push({ reg: v.registration, driver: v.driver_name, perf_name: perf._raw_driver_name, km: perf.total_running_km });
+          else unmatched.push({ reg: v.registration, driver: v.driver_name });
+        }
+        return corsResponse(JSON.stringify({
+          vehicles_total: vehicles.length,
+          branches: branches.length,
+          branch_names: branches,
+          driver_perf_count: driverPerf.length,
+          driver_perf_sample: driverPerf.slice(0,5).map(d=>({ raw: d._raw_driver_name, clean: d.driver_name, km: d.total_running_km })),
+          vehicle_sample: vehicles.slice(0,5).map(v=>({ reg: v.registration, driver: v.driver_name })),
+          matched_sample: matched.slice(0,10),
+          unmatched_sample: unmatched.slice(0,10),
+        }));
+      } catch(e) { return corsResponse(JSON.stringify({ error: e.message })); }
+    }
+
     if (path === "/fleetai/perf-probe") {
       const ck = url.searchParams.get("client") || "demo";
       const cm = getClientMeta(ck);
