@@ -448,13 +448,13 @@ export default {
           dateFrom = new Date(new Date(dateTo) - maxDays * 86400000).toISOString().slice(0, 10);
         }
 
-        let list = await getDriverPerf(dateFrom, dateTo, env, apiKey, clientMeta.company);
+        let list = await getDriverPerf(dateFrom, dateTo, env, apiKey, clientMeta.company, vlist._branches || []);
 
         // If no data, try progressively shorter recent windows
         if (!list.length) {
           for (const days of [30, 14, 7]) {
             const fb = new Date(new Date(dateTo) - days * 86400000).toISOString().slice(0, 10);
-            list = await getDriverPerf(fb, dateTo, env, apiKey, clientMeta.company);
+            list = await getDriverPerf(fb, dateTo, env, apiKey, clientMeta.company, vlist._branches || []);
             if (list.length) { dateFrom = fb; break; }
           }
         }
