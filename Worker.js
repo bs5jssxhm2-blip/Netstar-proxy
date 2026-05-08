@@ -29,6 +29,413 @@ const FTC_HTML = atob("PCFET0NUWVBFIGh0bWw+CjxodG1sIGxhbmc9ImVuIj4KPGhlYWQ+CjxtZ
 function getKey(env, clientId) { return (clientId && CUSTOMER_KEYS[clientId]) ? CUSTOMER_KEYS[clientId] : (env.FLEETAI_API_KEY || FALLBACK_KEY); }
 function getClientMeta(clientId) { return CUSTOMER_META[clientId] || { company: COMPANY, location: LOCATION }; }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// AZURE AD SSO — OAuth 2.0 / MSAL integration
+// Allows QAS and other enterprise customers to authenticate via their own
+// Microsoft Azure AD tenant instead of username/password.
+//
+// Setup per tenant:
+//   1. Register FleetAI Pro as an Enterprise App in the customer's Azure AD
+//   2. Set redirect URI to: https://<worker-url>/auth/callback
+//   3. Store AZURE_CLIENT_ID and AZURE_CLIENT_SECRET as Worker secrets
+//   4. Pass tenant_id as a query param or store per customer in AZURE_TENANTS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Map clientId → Azure AD tenant ID
+// Add customer tenants here as they are onboarded
+const AZURE_TENANTS = {
+  // "qas":          "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  // "lakemacquarie": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  // "demo":         "common",  // multi-tenant / personal accounts
+};
+
+// Build the Azure AD OAuth2 authorisation URL for a given tenant
+function azureAuthUrl(env, clientId, tenantId, redirectUri, state) {
+  const tenant = tenantId || AZURE_TENANTS[clientId] || env.AZURE_TENANT_ID || "common";
+  const params = new URLSearchParams({
+    client_id:     env.AZURE_CLIENT_ID || "",
+    response_type: "code",
+    redirect_uri:  redirectUri,
+    response_mode: "query",
+    scope:         "openid profile email User.Read",
+    state:         state || clientId,
+    prompt:        "select_account",
+  });
+  return `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`;
+}
+
+// Exchange the auth code for tokens via Azure AD token endpoint
+async function azureTokenExchange(env, code, redirectUri, tenantId) {
+  const tenant = tenantId || env.AZURE_TENANT_ID || "common";
+  const body = new URLSearchParams({
+    client_id:     env.AZURE_CLIENT_ID || "",
+    client_secret: env.AZURE_CLIENT_SECRET || "",
+    code,
+    redirect_uri:  redirectUri,
+    grant_type:    "authorization_code",
+    scope:         "openid profile email User.Read",
+  });
+  const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error("Azure token exchange failed: " + err.slice(0, 200));
+  }
+  return res.json();
+}
+
+// Fetch the user's profile from Microsoft Graph
+async function azureGetUserProfile(accessToken) {
+  const res = await fetch("https://graph.microsoft.com/v1.0/me", {
+    headers: { Authorization: "Bearer " + accessToken },
+  });
+  if (!res.ok) throw new Error("Graph API failed: " + res.status);
+  return res.json();
+}
+
+// Create a signed session token for an Azure AD authenticated user
+function makeAzureToken(clientId, email, tenantId, secret) {
+  const payload = [clientId, email, tenantId || "common", Date.now(), secret || SESSION_SECRET].join(":");
+  return btoa(payload);
+}
+
+// Verify an Azure AD session token
+function verifyAzureToken(token, clientId, secret) {
+  try {
+    const parts = atob(token).split(":");
+    if (parts[parts.length - 1] !== (secret || SESSION_SECRET)) return false;
+    if (parts[0] !== clientId) return false;
+    const age = Date.now() - parseInt(parts[parts.length - 2]);
+    return age < 8 * 60 * 60 * 1000; // 8-hour session
+  } catch { return false; }
+}
+
+// Check if the request carries a valid Azure AD session cookie
+function isAzureAuthenticated(request, clientId, secret) {
+  const m = (request.headers.get("Cookie") || "").match(/ftc_azure_session=([^;]+)/);
+  if (!m) return false;
+  return verifyAzureToken(m[1], clientId, secret);
+}
+
+// Render the Azure AD login initiation page (redirects to Microsoft)
+function azureLoginRedirectPage(authUrl, clientId, companyName) {
+  return new Response(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${companyName || "FleetAI Pro"} — Sign In</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#060c14;color:#e8f4ff;font-family:Arial,sans-serif;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#0c1622;border:1px solid #1e2e40;border-radius:12px;padding:48px 40px;
+  width:100%;max-width:400px;text-align:center}
+.logo{font-size:11px;font-weight:700;color:#3d9be8;letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:12px}
+h1{font-size:22px;font-weight:700;margin-bottom:6px}
+.sub{font-size:14px;color:#7899bb;margin-bottom:36px}
+.ms-btn{display:inline-flex;align-items:center;gap:12px;background:#fff;
+  color:#111;border:none;border-radius:6px;padding:12px 24px;font-size:15px;
+  font-weight:600;cursor:pointer;text-decoration:none;transition:opacity .15s}
+.ms-btn:hover{opacity:.9}
+.ms-btn svg{flex-shrink:0}
+.divider{color:#3d5a7a;font-size:12px;margin:24px 0}
+.alt-link{color:#3d9be8;font-size:13px;text-decoration:none}
+.alt-link:hover{text-decoration:underline}
+.footer{font-size:11px;color:#3d5a7a;margin-top:28px}
+</style></head>
+<body><div class="card">
+  <div class="logo">Netstar Australia</div>
+  <h1>FleetAI Pro</h1>
+  <div class="sub">${companyName ? companyName + " &mdash; " : ""}Sign in to continue</div>
+  <a href="${authUrl}" class="ms-btn">
+    <svg width="20" height="20" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+    </svg>
+    Sign in with Microsoft
+  </a>
+  <div class="divider">or</div>
+  <a href="/ftc-login?client=${clientId}" class="alt-link">Use username &amp; password instead</a>
+  <div class="footer">Your Microsoft credentials are never shared with Netstar &bull; Secured by Azure AD</div>
+</div></body></html>`,
+    { status: 200, headers: { "Content-Type": "text/html;charset=UTF-8" } });
+}
+
+// Handle the OAuth2 callback from Azure AD
+async function handleAzureCallback(request, env) {
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state") || "demo";
+  const error = url.searchParams.get("error");
+
+  if (error) {
+    return new Response(`Azure AD login error: ${url.searchParams.get("error_description") || error}`, { status: 400 });
+  }
+  if (!code) return new Response("Missing auth code", { status: 400 });
+
+  const clientId = state;
+  const redirectUri = `${url.origin}/auth/callback`;
+  const tenantId = AZURE_TENANTS[clientId] || env.AZURE_TENANT_ID || "common";
+
+  try {
+    const tokens = await azureTokenExchange(env, code, redirectUri, tenantId);
+    const profile = await azureGetUserProfile(tokens.access_token);
+    const email = profile.mail || profile.userPrincipalName || "unknown";
+    const displayName = profile.displayName || email;
+
+    const sessionToken = makeAzureToken(clientId, email, tenantId, env.SESSION_SECRET || SESSION_SECRET);
+
+    // Redirect to the app with session cookie set
+    return new Response("", {
+      status: 302,
+      headers: {
+        Location: `/?client=${clientId}&az_user=${encodeURIComponent(displayName)}`,
+        "Set-Cookie": `ftc_azure_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800`,
+      },
+    });
+  } catch (e) {
+    return new Response(`Authentication failed: ${e.message}`, { status: 500 });
+  }
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CAD WEBHOOK LAYER — Duress alert routing to QAS CAD / ESB
+//
+// Receives duress events from devices and forwards them to a configured
+// CAD system (Hexagon I/CAD, Motorola PremierOne, or generic ESB webhook).
+//
+// QAS will provide their CAD API endpoint and auth credentials once
+// they confirm their CAD vendor. Until then, this layer queues events
+// and provides a monitoring dashboard endpoint.
+//
+// Endpoints:
+//   POST /duress-alert          — ingest a duress event from a device
+//   GET  /duress-events         — retrieve recent duress events (QAS internal)
+//   POST /cad-config            — update CAD webhook target (admin only)
+//   GET  /cad-status            — check CAD integration health
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// In-memory event store (resets on Worker restart — use KV in production)
+const DURESS_EVENT_STORE = [];
+const MAX_STORED_EVENTS = 500;
+
+// Supported CAD integration profiles
+const CAD_PROFILES = {
+  hexagon_icad: {
+    name: "Hexagon I/CAD (HxGN OnCall)",
+    method: "POST",
+    contentType: "application/json",
+    buildPayload: (event) => ({
+      incidentType: "DURESS",
+      priority: 1,
+      callSource: "FleetAI Pro Duress",
+      location: {
+        latitude:  event.lat,
+        longitude: event.lon,
+        address:   event.address || "",
+        lastKnown: event.location_type === "last_known",
+      },
+      unit: {
+        id:         event.unit_id,
+        name:       event.unit_name || event.unit_id,
+        driverName: event.driver_name || "",
+      },
+      eventTime:   event.timestamp,
+      deviceId:    event.device_id,
+      notes:       `FleetAI Pro duress alert — ${event.unit_name || event.unit_id} — ${event.driver_name || "Unknown driver"}`,
+    }),
+  },
+  motorola_premierone: {
+    name: "Motorola PremierOne",
+    method: "POST",
+    contentType: "application/json",
+    buildPayload: (event) => ({
+      CallType:    "DURESS",
+      Priority:    "1",
+      CallerName:  event.driver_name || event.unit_name || "",
+      Location:    event.address || `${event.lat},${event.lon}`,
+      Latitude:    String(event.lat),
+      Longitude:   String(event.lon),
+      Comments:    `FleetAI Pro: ${event.unit_id} duress activation`,
+      SourceSystem: "NetstarFleetAIPro",
+      EventTime:   event.timestamp,
+    }),
+  },
+  generic_webhook: {
+    name: "Generic Webhook / ESB",
+    method: "POST",
+    contentType: "application/json",
+    buildPayload: (event) => event, // Pass through as-is
+  },
+};
+
+// Normalise an inbound duress event from any device type
+function normaliseDuressEvent(raw) {
+  return {
+    event_id:      crypto.randomUUID(),
+    timestamp:     raw.timestamp || new Date().toISOString(),
+    device_id:     raw.device_id || raw.imei || raw.deviceId || "",
+    unit_id:       raw.unit_id   || raw.registration || raw.vehicleId || "",
+    unit_name:     raw.unit_name || raw.vehicle_name || "",
+    driver_name:   raw.driver_name || raw.driver || "",
+    lat:           parseFloat(raw.lat || raw.latitude  || 0),
+    lon:           parseFloat(raw.lon || raw.longitude || 0),
+    address:       raw.address || raw.location_address || "",
+    location_type: raw.location_type || (raw.gps_live === false ? "last_known" : "live"),
+    battery_pct:   raw.battery_pct  || raw.battery || null,
+    signal_type:   raw.signal_type  || "4G",   // 4G | WiFi | Satellite
+    activation:    raw.activation   || "manual", // manual | auto | test
+    client_id:     raw.client_id    || "unknown",
+    raw:           raw,
+  };
+}
+
+// Forward a duress event to the configured CAD system
+async function forwardToCAD(event, env) {
+  const cadUrl    = env.CAD_WEBHOOK_URL;
+  const cadProfile = env.CAD_PROFILE || "generic_webhook";
+  const cadAuth   = env.CAD_AUTH_HEADER; // e.g. "Bearer <token>" or "Basic <b64>"
+
+  if (!cadUrl) {
+    return { forwarded: false, reason: "CAD_WEBHOOK_URL not configured — event stored locally" };
+  }
+
+  const profile = CAD_PROFILES[cadProfile] || CAD_PROFILES.generic_webhook;
+  const payload = profile.buildPayload(event);
+
+  const headers = { "Content-Type": profile.contentType };
+  if (cadAuth) headers["Authorization"] = cadAuth;
+
+  try {
+    const res = await fetch(cadUrl, {
+      method:  profile.method,
+      headers,
+      body:    JSON.stringify(payload),
+    });
+    const responseText = await res.text().catch(() => "");
+    return {
+      forwarded:    res.ok,
+      cad_status:   res.status,
+      cad_profile:  cadProfile,
+      cad_url:      cadUrl,
+      response:     responseText.slice(0, 200),
+      reason:       res.ok ? "success" : `CAD returned HTTP ${res.status}`,
+    };
+  } catch (e) {
+    return { forwarded: false, reason: "CAD request failed: " + e.message };
+  }
+}
+
+// Store event locally (fallback / audit trail)
+function storeEvent(event, cadResult) {
+  DURESS_EVENT_STORE.unshift({ ...event, _cad: cadResult, _stored_at: new Date().toISOString() });
+  if (DURESS_EVENT_STORE.length > MAX_STORED_EVENTS) DURESS_EVENT_STORE.length = MAX_STORED_EVENTS;
+}
+
+// POST /duress-alert — main ingest endpoint
+async function handleDuressAlert(request, env) {
+  let raw;
+  try {
+    raw = await request.json();
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+
+  const event = normaliseDuressEvent(raw);
+
+  // Validate minimum required fields
+  if (!event.device_id && !event.unit_id) {
+    return errorResponse("Missing device_id or unit_id", 400);
+  }
+  if (!event.lat && !event.lon) {
+    return errorResponse("Missing location (lat/lon)", 400);
+  }
+
+  // Forward to CAD (non-blocking if CAD is unavailable)
+  const cadResult = await forwardToCAD(event, env);
+
+  // Always store locally for audit trail and monitoring dashboard
+  storeEvent(event, cadResult);
+
+  return corsResponse(JSON.stringify({
+    accepted:  true,
+    event_id:  event.event_id,
+    timestamp: event.timestamp,
+    unit:      event.unit_id,
+    location:  { lat: event.lat, lon: event.lon, type: event.location_type },
+    cad:       cadResult,
+  }), 200);
+}
+
+// GET /duress-events — returns recent events for QAS monitoring dashboard
+function handleDuressEvents(url) {
+  const limit  = Math.min(parseInt(url.searchParams.get("limit")  || "50"), 200);
+  const unitId = url.searchParams.get("unit_id") || "";
+  const since  = url.searchParams.get("since")   || "";
+
+  let events = DURESS_EVENT_STORE;
+  if (unitId) events = events.filter(e => e.unit_id === unitId);
+  if (since)  events = events.filter(e => e.timestamp >= since);
+
+  return corsResponse(JSON.stringify({
+    total:  events.length,
+    limit,
+    events: events.slice(0, limit).map(e => ({
+      event_id:      e.event_id,
+      timestamp:     e.timestamp,
+      unit_id:       e.unit_id,
+      unit_name:     e.unit_name,
+      driver_name:   e.driver_name,
+      lat:           e.lat,
+      lon:           e.lon,
+      location_type: e.location_type,
+      battery_pct:   e.battery_pct,
+      signal_type:   e.signal_type,
+      activation:    e.activation,
+      cad_forwarded: e._cad?.forwarded || false,
+      cad_status:    e._cad?.cad_status || null,
+    })),
+  }));
+}
+
+// GET /cad-status — health check for CAD integration
+function handleCADStatus(env) {
+  const cadUrl     = env.CAD_WEBHOOK_URL;
+  const cadProfile = env.CAD_PROFILE || "generic_webhook";
+  const profile    = CAD_PROFILES[cadProfile] || CAD_PROFILES.generic_webhook;
+
+  const recentEvents = DURESS_EVENT_STORE.slice(0, 10);
+  const forwarded    = recentEvents.filter(e => e._cad?.forwarded).length;
+
+  return corsResponse(JSON.stringify({
+    integration: {
+      configured:   !!cadUrl,
+      cad_profile:  cadProfile,
+      profile_name: profile.name,
+      webhook_url:  cadUrl ? cadUrl.replace(/https?:\/\/[^/]+/, "[host redacted]") : null,
+      auth_set:     !!env.CAD_AUTH_HEADER,
+      azure_sso:    !!(env.AZURE_CLIENT_ID && env.AZURE_CLIENT_SECRET),
+    },
+    event_stats: {
+      total_stored:   DURESS_EVENT_STORE.length,
+      recent_10:      recentEvents.length,
+      recent_forwarded: forwarded,
+      last_event:     DURESS_EVENT_STORE[0]?.timestamp || null,
+    },
+    cad_profiles_available: Object.entries(CAD_PROFILES).map(([k, v]) => ({ id: k, name: v.name })),
+    azure_tenants_configured: Object.keys(AZURE_TENANTS).length,
+    setup_notes: [
+      cadUrl ? null : "ACTION REQUIRED: Set CAD_WEBHOOK_URL Worker secret (Cloudflare dashboard → Settings → Variables)",
+      env.AZURE_CLIENT_ID ? null : "OPTIONAL: Set AZURE_CLIENT_ID + AZURE_CLIENT_SECRET + AZURE_TENANT_ID for SSO",
+    ].filter(Boolean),
+  }));
+}
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -382,12 +789,58 @@ export default {
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
-    // Login form handler
+    // ── Azure AD SSO routes ─────────────────────────────────────────────────
+    if (path === "/auth/login") {
+      const redirectUri = `${url.origin}/auth/callback`;
+      const authUrl = azureAuthUrl(env, clientId, AZURE_TENANTS[clientId], redirectUri, clientId);
+      const meta = getClientMeta(clientId);
+      return azureLoginRedirectPage(authUrl, clientId, meta.company);
+    }
+
+    if (path === "/auth/callback") {
+      return handleAzureCallback(request, env);
+    }
+
+    if (path === "/auth/logout") {
+      const tenant = AZURE_TENANTS[clientId] || env.AZURE_TENANT_ID || "common";
+      const postLogoutUrl = encodeURIComponent(`${url.origin}/?client=${clientId}`);
+      return new Response("", {
+        status: 302,
+        headers: {
+          Location: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/logout?post_logout_redirect_uri=${postLogoutUrl}`,
+          "Set-Cookie": "ftc_azure_session=; Path=/; HttpOnly; Max-Age=0",
+        },
+      });
+    }
+
+    // ── CAD webhook routes ──────────────────────────────────────────────────
+    if (path === "/duress-alert" && request.method === "POST") {
+      return handleDuressAlert(request, env);
+    }
+
+    if (path === "/duress-events") {
+      return handleDuressEvents(url);
+    }
+
+    if (path === "/cad-status") {
+      return handleCADStatus(env);
+    }
+
+    // ── Legacy auth ─────────────────────────────────────────────────────────
     if (path === "/ftc-login" && request.method === "POST") return handleLogin(request);
 
-    // Auth check for customer-facing pages
     if (clientId !== "demo" && (path === "/ftc" || path === "/" || path === "/roi")) {
-      if (!isAuthenticated(request, clientId)) return loginPage(clientId, "");
+      const azureOk = isAzureAuthenticated(request, clientId, env.SESSION_SECRET || SESSION_SECRET);
+      const legacyOk = isAuthenticated(request, clientId);
+      if (!azureOk && !legacyOk) {
+        if (env.AZURE_CLIENT_ID && AZURE_TENANTS[clientId]) {
+          const redirectUri = `${url.origin}/auth/callback`;
+          const authUrl = azureAuthUrl(env, clientId, AZURE_TENANTS[clientId], redirectUri, clientId);
+          const meta = getClientMeta(clientId);
+          return azureLoginRedirectPage(authUrl, clientId, meta.company);
+        }
+        return loginPage(clientId, "");
+      }
     }
 
     if (path === "/health") {
