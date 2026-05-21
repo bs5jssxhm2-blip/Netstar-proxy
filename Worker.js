@@ -251,8 +251,6 @@ function handleCADStatus(env) {
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SYNTHESIA VIDEO GENERATION — Server-side proxy
-// Required Worker secret: SYNTHESIA_API_KEY
-// Set via Cloudflare dashboard → Settings → Variables and Secrets
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const SYNTHESIA_BASE = "https://api.synthesia.io/v2";
@@ -320,12 +318,85 @@ async function handleSynthesiaAvatars(env) {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TEAM TRACKER — KV-backed task logging
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async function handleTrackerPage(request, env) {
+  if (!env.TRACKER_KV) {
+    return new Response("TRACKER_KV binding not configured. Add it to wrangler.toml and redeploy.", {
+      status: 503, headers: { "Content-Type": "text/plain" },
+    });
+  }
+  const html = await env.TRACKER_KV.get("tracker-html");
+  if (!html) {
+    return new Response("Tracker page not uploaded yet. Run: wrangler kv key put --binding=TRACKER_KV \"tracker-html\" --path=tracker.html", {
+      status: 503, headers: { "Content-Type": "text/plain" },
+    });
+  }
+  return new Response(html, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
+}
+
+async function handleGetTasks(request, env) {
+  if (!env.TRACKER_KV) return corsResponse(JSON.stringify([]), 200);
+  const url = new URL(request.url);
+  const date = url.searchParams.get("date");
+  const member = url.searchParams.get("member");
+  const list = await env.TRACKER_KV.list({ prefix: "task:" });
+  const tasks = [];
+  await Promise.all(
+    list.keys.map(async ({ name }) => {
+      const raw = await env.TRACKER_KV.get(name);
+      if (raw) {
+        try {
+          const task = JSON.parse(raw);
+          if (date && task.date !== date) return;
+          if (member && task.member !== member) return;
+          tasks.push(task);
+        } catch (_) {}
+      }
+    })
+  );
+  tasks.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  return corsResponse(JSON.stringify(tasks));
+}
+
+async function handlePostTask(request, env) {
+  if (!env.TRACKER_KV) return corsResponse(JSON.stringify({ error: "TRACKER_KV not configured" }), 503);
+  let body;
+  try { body = await request.json(); } catch (_) { return corsResponse(JSON.stringify({ error: "Invalid JSON" }), 400); }
+  const { member, date, task, cat, hours, status, impact, notes } = body;
+  if (!member || !date || !task || !cat || !hours) {
+    return corsResponse(JSON.stringify({ error: "Missing required fields: member, date, task, cat, hours" }), 400);
+  }
+  const id = `task:${date}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+  const record = {
+    id, member, date, task, cat,
+    hours: parseFloat(hours),
+    status: status || "in-progress",
+    impact: impact || "medium",
+    notes: notes || "",
+    createdAt: new Date().toISOString(),
+  };
+  await env.TRACKER_KV.put(id, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
+  return corsResponse(JSON.stringify({ success: true, id, record }), 201);
+}
+
+async function handleDeleteTask(request, env) {
+  if (!env.TRACKER_KV) return corsResponse(JSON.stringify({ error: "TRACKER_KV not configured" }), 503);
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  if (!id) return corsResponse(JSON.stringify({ error: "Missing id param" }), 400);
+  await env.TRACKER_KV.delete(id);
+  return corsResponse(JSON.stringify({ success: true }));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // HELPERS
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
 };
 
@@ -581,6 +652,12 @@ export default {
     }
     if (path === "/synthesia/list") return handleSynthesiaList(url, env);
     if (path === "/synthesia/avatars") return handleSynthesiaAvatars(env);
+
+    // ── Team tracker routes ──────────────────────────────────────────────────
+    if (path === "/team-tracker") return handleTrackerPage(request, env);
+    if (path === "/tracker/tasks" && request.method === "GET")    return handleGetTasks(request, env);
+    if (path === "/tracker/tasks" && request.method === "POST")   return handlePostTask(request, env);
+    if (path === "/tracker/tasks" && request.method === "DELETE") return handleDeleteTask(request, env);
 
     // ── Legacy auth ──────────────────────────────────────────────────────────
     if (path === "/ftc-login" && request.method === "POST") return handleLogin(request);
