@@ -1,7 +1,13 @@
 {
   "version": 2,
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/public/$1" }
+  "functions": {
+    "api/claude.js": {
+      "memory": 128,
+      "maxDuration": 10
+    }
+  },
+  "rewrites": [
+    { "source": "/api/claude", "destination": "/api/claude" },
+    { "source": "/(.*)", "destination": "/public/index.html" }
   ]
 }
