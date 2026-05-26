@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Netstar · T3 Upgrade Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#1A5FBF;--blue-lt:#E8F0FC;--blue-dk:#0D3A7A;
+  --green:#0E8A5F;--green-lt:#E4F5EE;--green-dk:#065A3C;
+  --amber:#B86A00;--amber-lt:#FEF0DC;--amber-dk:#7A4500;
+  --red:#C0392B;--red-lt:#FDEBEA;--red-dk:#8B1A12;
+  --purple:#5B3FD9;--purple-lt:#EDEAFC;--purple-dk:#321E8C;
+  --slate:#2C3E50;--gray:#3D3D3D;--gray-lt:#F4F4F2;--gray-mid:#9A9A96;--gray-border:#E2E2DE;
+  --bg:#FAFAF8;--surface:#FFFFFF;
+  --font:'DM Sans',system-ui,sans-serif;--mono:'DM Mono',monospace;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+  --shadow-md:0 4px 16px rgba(0,0,0,.12),0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.18),0 8px 24px rgba(0,0,0,.1);
+}
+html,body{height:100%;font-family:var(--font);font-size:13px;background:var(--bg);color:var(--gray);overflow-x:hidden}
+button{font-family:var(--font);cursor:pointer}
+input,select,textarea{font-family:var(--font);font-size:13px}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-thumb{background:var(--gray-border);border-radius:10px}
+
+/* ── LOGIN ── */
+#login-screen{
+  display:flex;align-items:center;justify-content:center;
+  min-height:100vh;position:relative;overflow:hidden;
+  background: #0D1B2A;
+}
+.login-bg{
+  position:absolute;inset:0;
+  background: radial-gradient(ellipse at 20% 50%, rgba(26,95,191,.35) 0%, transparent 60%),
+              radial-gradient(ellipse at 80% 20%, rgba(14,138,95,.25) 0%, transparent 50%),
+              radial-gradient(ellipse at 60% 80%, rgba(91,63,217,.2) 0%, transparent 50%);
+}
+.login-grid{
+  position:absolute;inset:0;
+  background-image: linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),
+                    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:40px 40px;
+}
+.login-card{
+  position:relative;background:rgba(255,255,255,.97);border-radius:20px;
+  padding:44px 48px;width:400px;max-width:94vw;
+  box-shadow:var(--shadow-lg);
+  animation:slideUp .4s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+.login-logo{display:flex;align-items:center;gap:12px;margin-bottom:32px}
+.login-mark{
+  width:44px;height:44px;background:var(--blue);border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:20px;font-weight:700;letter-spacing:-.5px;
+  box-shadow:0 4px 12px rgba(26,95,191,.4);
+}
+.login-brand{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--gray-mid);text-transform:uppercase}
+.login-brand strong{display:block;font-size:16px;font-weight:600;color:var(--slate);letter-spacing:.01em;text-transform:none}
+.login-heading{font-size:24px;font-weight:600;color:var(--slate);margin-bottom:6px;letter-spacing:-.3px}
+.login-sub{font-size:13px;color:var(--gray-mid);margin-bottom:32px;line-height:1.5}
+.rep-btn{
+  width:100%;display:flex;align-items:center;gap:16px;padding:14px 18px;
+  border:1.5px solid var(--gray-border);border-radius:12px;background:var(--bg);
+  margin-bottom:10px;transition:all .18s;text-align:left;
+}
+.rep-btn:hover{border-color:var(--blue);background:var(--blue-lt);transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.rep-btn:active{transform:translateY(0)}
+.rep-av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.rep-info-name{font-weight:600;font-size:14px;color:var(--slate)}
+.rep-info-role{font-size:11px;color:var(--gray-mid);margin-top:1px}
+.login-footer{text-align:center;margin-top:20px;font-size:11px;color:var(--gray-mid)}
+.login-footer span{display:inline-flex;align-items:center;gap:5px}
+.ns-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── APP ── */
+#app{display:none;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ── TOPBAR ── */
+#topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;height:54px;background:var(--surface);
+  border-bottom:1px solid var(--gray-border);flex-shrink:0;
+  box-shadow:var(--shadow);z-index:100;position:relative;
+}
+.tb-left{display:flex;align-items:center;gap:14px}
+.tb-mark{width:34px;height:34px;background:var(--blue);border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:700}
+.tb-title{font-size:14px;font-weight:600;color:var(--slate);letter-spacing:-.2px}
+.tb-sub{font-size:11px;color:var(--gray-mid)}
+.tb-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px}
+.tb-badge-ns{background:var(--green-lt);color:var(--green-dk)}
+.tb-right{display:flex;align-items:center;gap:12px}
+.rep-chips{display:flex;gap:5px}
+.rep-chip{
+  display:flex;align-items:center;gap:7px;padding:5px 12px 5px 7px;
+  border-radius:20px;border:none;font-size:12px;font-weight:500;cursor:pointer;
+  transition:all .15s;color:#fff;
+}
+.rep-chip .chip-av{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;background:rgba(255,255,255,.3)}
+.rep-chip.inactive{opacity:.38;filter:grayscale(.5)}
+.rep-chip:hover{opacity:.9;transform:scale(1.04)}
+.view-tabs{display:flex;background:var(--gray-lt);border-radius:9px;padding:3px;gap:2px}
+.view-tab{font-size:12px;font-weight:500;padding:6px 14px;border-radius:7px;border:none;background:transparent;color:var(--gray-mid);transition:all .18s;display:flex;align-items:center;gap:5px}
+.view-tab.active{background:var(--surface);color:var(--slate);box-shadow:var(--shadow)}
+
+/* ── METRICS ── */
+#metrics{display:grid;grid-template-columns:repeat(6,1fr);flex-shrink:0;border-bottom:1px solid var(--gray-border)}
+.metric{padding:11px 16px;border-right:1px solid var(--gray-border);background:var(--surface)}
+.metric:last-child{border-right:none}
+.m-label{font-size:9.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--gray-mid);margin-bottom:3px}
+.m-val{font-size:20px;font-weight:600;line-height:1;letter-spacing:-.5px}
+.m-val.c-blue{color:var(--blue)}.m-val.c-green{color:var(--green)}.m-val.c-red{color:var(--red)}.m-val.c-amber{color:var(--amber)}.m-val.c-purple{color:var(--purple)}
+.m-sub{font-size:10px;color:var(--gray-mid);margin-top:3px}
+
+/* ── FILTER BAR ── */
+#filterbar{
+  display:flex;align-items:center;gap:8px;padding:9px 20px;
+  background:var(--surface);border-bottom:1px solid var(--gray-border);flex-shrink:0;flex-wrap:wrap;
+}
+.fb-search{
+  padding:7px 10px 7px 32px;border:1px solid var(--gray-border);border-radius:8px;
+  background:var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%239A9A96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center;
+  width:195px;font-size:12px;color:var(--gray);outline:none;transition:border .15s;
+}
+.fb-search:focus{border-color:var(--blue);background-color:var(--surface)}
+.fb-sel{padding:6px 9px;border:1px solid var(--gray-border);border-radius:8px;background:var(--bg);font-size:12px;color:var(--gray);outline:none;cursor:pointer;transition:border .15s}
+.fb-sel:focus{border-color:var(--blue)}
+.sort-btn{padding:6px 11px;border:1px solid var(--gray-border);border-radius:8px;background:var(--bg);font-size:11px;font-weight:500;color:var(--gray-mid);transition:all .15s}
+.sort-btn.active{background:var(--blue-lt);border-color:var(--blue);color:var(--blue)}
+.fb-count{font-size:11px;color:var(--gray-mid);margin-left:auto;font-weight:500}
+
+/* ── BOARD TABLE ── */
+#board-view{flex:1;overflow:auto;display:flex;flex-direction:column}
+#table-wrap{flex:1;overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:980px}
+thead th{
+  font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--gray-mid);padding:9px 14px;text-align:left;
+  background:var(--gray-lt);border-bottom:1px solid var(--gray-border);
+  position:sticky;top:0;z-index:10;white-space:nowrap;
+}
+tbody tr{border-bottom:1px solid var(--gray-border);transition:background .1s;cursor:pointer}
+tbody tr:hover{background:#F6F6F4}
+td{padding:10px 14px;vertical-align:middle}
+.acct-name{font-weight:600;font-size:13px;color:var(--slate);max-width:195px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-sub{font-size:10px;color:var(--gray-mid);margin-top:2px;display:flex;align-items:center;gap:4px}
+.ns-dot-sm{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0}
+.plat-tag{display:inline-block;font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;white-space:nowrap}
+.pt-legacy{background:var(--red-lt);color:var(--red-dk)}
+.pt-fleet{background:var(--blue-lt);color:var(--blue-dk)}
+.pt-au3{background:var(--amber-lt);color:var(--amber-dk)}
+.pt-other{background:var(--gray-lt);color:var(--gray-mid)}
+.arr-val{font-weight:600;font-size:13px;font-family:var(--mono);color:var(--slate)}
+.arr-sub{font-size:10px;color:var(--gray-mid)}
+.cb{display:inline-block;font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;white-space:nowrap}
+.cb-ghost{background:var(--red-lt);color:var(--red-dk)}
+.cb-cold{background:var(--amber-lt);color:var(--amber-dk)}
+.cb-warm{background:#FEF9EC;color:#7A5800}
+.cb-fresh{background:var(--green-lt);color:var(--green-dk)}
+.cb-never{background:var(--gray-lt);color:var(--gray-mid)}
+.upgrade-lbl{font-size:11px;color:var(--blue);font-weight:500}
+.rep-picker{display:flex;gap:4px}
+.rdot{
+  width:26px;height:26px;border-radius:50%;font-size:9px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  border:2px solid transparent;cursor:pointer;transition:all .15s;color:#fff;
+}
+.rdot.off{background:var(--gray-lt)!important;color:var(--gray-mid)!important;border-color:var(--gray-border)!important}
+.rdot:hover{transform:scale(1.15)}
+.stage-sel{
+  font-size:11px;font-weight:600;padding:4px 7px;border-radius:8px;
+  border:1px solid var(--gray-border);background:var(--gray-lt);
+  color:var(--gray);cursor:pointer;outline:none;max-width:130px;
+}
+.act-btns{display:flex;gap:4px}
+.abt{
+  width:28px;height:28px;border-radius:7px;border:1px solid;
+  font-size:13px;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;background:transparent;
+}
+.abt:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.abt-ai{border-color:var(--purple);color:var(--purple)}
+.abt-ai:hover{background:var(--purple-lt)}
+.abt-log{border-color:var(--blue);color:var(--blue)}
+.abt-log:hover{background:var(--blue-lt)}
+.abt-opp{border-color:var(--green);color:var(--green)}
+.abt-opp:hover{background:var(--green-lt)}
+
+/* ── KANBAN ── */
+#kanban-view{flex:1;overflow:auto;display:none}
+#kanban-wrap{display:flex;gap:10px;padding:16px 20px;align-items:flex-start;min-height:100%}
+.k-lane{flex-shrink:0;width:188px;background:var(--gray-lt);border-radius:12px;padding:11px;border:1px solid var(--gray-border)}
+.k-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;padding-bottom:8px;border-bottom:2px solid}
+.k-title{font-size:12px;font-weight:600}
+.k-count{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px}
+.k-arr{font-size:10px;color:var(--gray-mid);margin-bottom:8px;text-align:right;font-family:var(--mono)}
+.k-cards{display:flex;flex-direction:column;gap:7px;min-height:48px}
+.kcard{
+  background:var(--surface);border:1px solid var(--gray-border);border-radius:10px;
+  padding:11px;cursor:pointer;transition:all .18s;box-shadow:var(--shadow);
+}
+.kcard:hover{border-color:var(--blue);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.kc-name{font-weight:600;font-size:12px;color:var(--slate);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kc-plat{font-size:10px;color:var(--gray-mid);margin-bottom:7px}
+.kc-row{display:flex;justify-content:space-between;align-items:center}
+.kc-arr{font-weight:600;font-size:12px;font-family:var(--mono)}
+.kc-days{font-size:10px}
+.kc-foot{display:flex;justify-content:space-between;align-items:center;margin-top:7px}
+.kc-up{font-size:10px;color:var(--blue);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px}
+.kc-rep{font-size:9px;font-weight:700;padding:2px 6px;border-radius:20px;color:#fff;flex-shrink:0}
+.k-moves{display:flex;gap:3px;margin-top:8px;flex-wrap:wrap}
+.kmv{font-size:9px;padding:2px 5px;border-radius:4px;border:1px solid;cursor:pointer;font-weight:600;transition:opacity .1s}
+.kmv:hover{opacity:.75}
+.k-empty{text-align:center;padding:24px 0;font-size:11px;color:var(--gray-mid);font-style:italic}
+
+/* ── ACTIVITY ── */
+#activity-view{flex:1;overflow:auto;display:none;padding:16px 20px}
+.act-empty{text-align:center;padding:64px;color:var(--gray-mid);font-size:14px;line-height:2}
+.act-row{display:flex;gap:13px;padding:13px 0;border-bottom:1px solid var(--gray-border);align-items:flex-start}
+.act-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.act-body{flex:1;min-width:0}
+.act-head{font-size:13px;font-weight:600;color:var(--slate)}
+.act-head span{font-weight:400;color:var(--gray-mid)}
+.act-note{font-size:12px;color:var(--gray-mid);margin-top:3px;line-height:1.5}
+.act-next{font-size:11px;color:var(--blue);margin-top:3px;font-weight:500}
+.act-meta{text-align:right;flex-shrink:0}
+.act-date{font-size:10px;color:var(--gray-mid)}
+.act-rep{font-size:10px;color:var(--gray-mid);margin-top:1px}
+.ns-synced{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:600;padding:2px 7px;border-radius:20px;background:var(--green-lt);color:var(--green-dk);margin-top:5px}
+
+/* ── MODAL ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:500;backdrop-filter:blur(3px);animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{
+  background:var(--surface);border-radius:16px;width:520px;max-width:96vw;max-height:92vh;
+  overflow-y:auto;box-shadow:var(--shadow-lg);
+  animation:slideUp .25s cubic-bezier(.34,1.4,.64,1);
+}
+.mhead{display:flex;justify-content:space-between;align-items:center;padding:18px 24px;border-bottom:1px solid var(--gray-border)}
+.mtitle{font-size:15px;font-weight:600;color:var(--slate);letter-spacing:-.2px}
+.mclose{width:30px;height:30px;border-radius:8px;border:1px solid var(--gray-border);background:var(--bg);font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--gray-mid);transition:all .15s}
+.mclose:hover{background:var(--red-lt);color:var(--red);border-color:var(--red)}
+.mbody{padding:22px 24px}
+.field{margin-bottom:15px}
+.field label{display:block;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--gray-mid);margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%;padding:9px 11px;border:1px solid var(--gray-border);border-radius:9px;font-size:13px;color:var(--slate);background:var(--bg);outline:none;transition:border .15s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue);background:var(--surface)}
+.field textarea{resize:vertical;min-height:82px;line-height:1.5}
+.info-strip{background:var(--blue-lt);border:1px solid #C2D8F8;border-radius:10px;padding:11px 15px;margin-bottom:18px;display:flex;gap:20px;flex-wrap:wrap}
+.is-item span{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--blue-dk);opacity:.7;display:block;margin-bottom:2px}
+.is-item strong{font-size:13px;font-weight:600;color:var(--blue-dk)}
+.mfoot{display:flex;gap:8px;justify-content:flex-end;padding-top:8px}
+.btn-p{padding:9px 22px;background:var(--blue);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:7px}
+.btn-p:hover{background:var(--blue-dk);transform:translateY(-1px)}
+.btn-p:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-p.green{background:var(--green)}
+.btn-p.green:hover{background:var(--green-dk)}
+.btn-g{padding:9px 16px;background:transparent;border:1px solid var(--gray-border);border-radius:9px;font-size:13px;color:var(--gray-mid);cursor:pointer;transition:all .15s}
+.btn-g:hover{background:var(--gray-lt)}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── AI BRIEF ── */
+.brief-loader{display:flex;flex-direction:column;align-items:center;gap:18px;padding:40px 0}
+.brief-ring{width:40px;height:40px;border:3px solid var(--gray-border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+.brief-text{font-size:13.5px;line-height:1.8;color:var(--slate)}
+.brief-text p{margin-bottom:14px}
+.brief-text p:last-child{margin-bottom:0}
+
+/* ── TOAST ── */
+#toast{
+  position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:11px;
+  font-size:13px;font-weight:500;color:#fff;z-index:9999;
+  box-shadow:var(--shadow-md);pointer-events:none;
+  transform:translateY(80px);opacity:0;transition:all .3s cubic-bezier(.34,1.4,.64,1);
+}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.success{background:var(--green)}
+#toast.warn{background:var(--amber)}
+#toast.error{background:var(--red)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:880px){
+  #metrics{grid-template-columns:repeat(3,1fr)}
+  .metric:nth-child(3){border-right:none}
+  .metric:nth-child(3n){border-right:none}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-bg"></div>
+  <div class="login-grid"></div>
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-mark">N</div>
+      <div class="login-brand">
+        <strong>Netstar Australia</strong>
+        T3 Upgrade Sales Portal
+      </div>
+    </div>
+    <h2 class="login-heading">Who's prospecting today?</h2>
+    <p class="login-sub">Select your name to load your dashboard and begin working your Tier 3 upgrade pipeline.</p>
+    <button class="rep-btn" onclick="login('ebony')">
+      <div class="rep-av" style="background:#1A5FBF">EZ</div>
+      <div><div class="rep-info-name">Ebony Zilesen</div><div class="rep-info-role">Sales — T3 Upgrade Team</div></div>
+    </button>
+    <button class="rep-btn" onclick="login('lachlan')">
+      <div class="rep-av" style="background:#0E8A5F">LM</div>
+      <div><div class="rep-info-name">Lachlan McIntyre</div><div class="rep-info-role">Sales — T3 Upgrade Team</div></div>
+    </button>
+    <button class="rep-btn" onclick="login('honey')">
+      <div class="rep-av" style="background:#8B3A8B">HH</div>
+      <div><div class="rep-info-name">Honey Haldaria</div><div class="rep-info-role">Sales — T3 Upgrade Team</div></div>
+    </button>
+    <div class="login-footer">
+      <span><span class="ns-dot"></span> NetSuite connected &nbsp;·&nbsp; All activity syncs live</span>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="topbar">
+    <div class="tb-left">
+      <div class="tb-mark">N</div>
+      <div><div class="tb-title">T3 Upgrade Prospecting</div><div class="tb-sub">1,605 accounts · Live NetSuite sync</div></div>
+      <span class="tb-badge tb-badge-ns"><span class="ns-dot" style="width:6px;height:6px;margin-right:3px"></span>NS Live</span>
+    </div>
+    <div class="tb-right">
+      <div class="rep-chips" id="rep-chips"></div>
+      <div class="view-tabs">
+        <button class="view-tab active" onclick="setView('board')">📋 Board</button>
+        <button class="view-tab" onclick="setView('kanban')">⬡ Pipeline</button>
+        <button class="view-tab" onclick="setView('activity')">📞 Activity</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="metrics"></div>
+
+  <div id="filterbar">
+    <input class="fb-search" id="q" placeholder="Search accounts or platform…" oninput="render()"/>
+    <select class="fb-sel" id="f-stage" onchange="render()">
+      <option value="">All stages</option>
+      <option>Identified</option><option>Outreach</option><option>Discovery</option>
+      <option>Proposal</option><option>Won</option><option>Lost</option>
+      <option value="none">Not started</option>
+    </select>
+    <select class="fb-sel" id="f-rep" onchange="render()">
+      <option value="">All reps</option>
+      <option value="ebony">Ebony</option>
+      <option value="lachlan">Lachlan</option>
+      <option value="honey">Honey</option>
+    </select>
+    <select class="fb-sel" id="f-contact" onchange="render()">
+      <option value="">All contact status</option>
+      <option value="ghost">Ghost 180d+</option>
+      <option value="cold">Cold 90–180d</option>
+      <option value="never">Never contacted</option>
+      <option value="fresh">Fresh &lt;30d</option>
+    </select>
+    <button class="sort-btn active" id="sb-neglect" onclick="setSort('neglect')">↓ Most neglected</button>
+    <button class="sort-btn" id="sb-arr" onclick="setSort('arr')">↓ Highest ARR</button>
+    <span class="fb-count" id="fb-count"></span>
+  </div>
+
+  <div id="board-view">
+    <div id="table-wrap">
+      <table><thead><tr>
+        <th style="min-width:190px">Account</th><th>Platform</th><th>ARR</th>
+        <th>Last Contact</th><th>Upgrade Path</th><th>Rep</th><th>Stage</th>
+        <th style="min-width:100px">Actions</th>
+      </tr></thead><tbody id="tbody"></tbody></table>
+    </div>
+  </div>
+  <div id="kanban-view"><div id="kanban-wrap"></div></div>
+  <div id="activity-view"></div>
+</div>
+
+<!-- MODAL -->
+<div id="overlay" class="overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="mhead"><span class="mtitle" id="mtitle"></span><button class="mclose" onclick="closeModal()">✕</button></div>
+    <div class="mbody" id="mbody"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════════════════════
+const REPS = {
+  ebony:   {name:"Ebony Zilesen",    ini:"EZ", col:"#1A5FBF"},
+  lachlan: {name:"Lachlan McIntyre", ini:"LM", col:"#0E8A5F"},
+  honey:   {name:"Honey Haldaria",   ini:"HH", col:"#8B3A8B"},
+};
+const STAGES = ["Identified","Outreach","Discovery","Proposal","Won","Lost"];
+const SS = {
+  Identified:{bg:"#E8F0FC",tx:"#0D3A7A",dot:"#1A5FBF"},
+  Outreach:  {bg:"#FEF0DC",tx:"#7A4500",dot:"#B86A00"},
+  Discovery: {bg:"#EDEAFC",tx:"#321E8C",dot:"#5B3FD9"},
+  Proposal:  {bg:"#E4F5EE",tx:"#065A3C",dot:"#0E8A5F"},
+  Won:       {bg:"#EAF3DE",tx:"#2A4A10",dot:"#4A8A1A"},
+  Lost:      {bg:"#FDEBEA",tx:"#8B1A12",dot:"#C0392B"},
+};
+const SPROB = {Identified:10,Outreach:25,Discovery:40,Proposal:65,Won:100,Lost:0};
+const UPG = {
+  "Australia 2":"FLEET AI Cloud","Australia 3 - AVM":"FLEET AI + Telematics",
+  "Australia 3 - Fleet Tracker":"FLEET AI + Telematics","Australian":"FLEET AI Cloud",
+  "Ezy2c":"FLEET AI + Analytics","Netstar Fleet Lite":"FLEET AI Standard",
+  "IAP":"FLEET AI Cloud","FLEET AI":"FLEET AI Enterprise",
+};
+const LEGACY = ["Australia 2","Australian","Ezy2c","IAP","Netstar Fleet Lite"];
+const TODAY = new Date("2026-05-26");
+
+const SEED = [
+  {id:"a1", name:"Sarina Crane Hire",              plat:"Australia 2",           arr:9891, nsId:40366,   la:"17/3/2026"},
+  {id:"a2", name:"Townsville Cranes",              plat:"Australia 2",           arr:9871, nsId:40797,   la:"12/11/2025"},
+  {id:"a3", name:"Earth Civil Contracting",        plat:"Australia 2",           arr:9623, nsId:11009,   la:"19/8/2025"},
+  {id:"a4", name:"Designer Image Pty Ltd",         plat:"Australia 2",           arr:9559, nsId:33198,   la:"27/5/2026"},
+  {id:"a5", name:"Ace Gutters Pty Ltd (Sydney)",   plat:"Australia 2",           arr:9519, nsId:12395,   la:"13/2/2026"},
+  {id:"a6", name:"Waters Carroll Cranes",          plat:"Australia 2",           arr:9456, nsId:183231,  la:"30/5/2026"},
+  {id:"a7", name:"Grundys Waste (Ians Transport)", plat:"Australia 2",           arr:9388, nsId:51185,   la:"18/5/2026"},
+  {id:"a8", name:"Acronical Pty Ltd",              plat:"Australia 2",           arr:9311, nsId:10249,   la:"30/5/2026"},
+  {id:"a9", name:"Impact Cranes Pty Ltd",          plat:"Australia 2",           arr:9293, nsId:126575,  la:"20/4/2026"},
+  {id:"a10",name:"Zone Group Pty Ltd",             plat:"Australia 2",           arr:9184, nsId:33003,   la:"25/2/2026"},
+  {id:"a11",name:"Metro Utility Traffic Services", plat:"FLEET AI",              arr:9954, nsId:217649,  la:"17/4/2026"},
+  {id:"a12",name:"Mini Plant Hire Pty Ltd",        plat:"FLEET AI",              arr:9924, nsId:125472,  la:"25/2/2026"},
+  {id:"a13",name:"TROPICAL WASTE SERVICES",        plat:"FLEET AI",              arr:9848, nsId:112302,  la:"24/11/2023"},
+  {id:"a14",name:"VICTORIAN FISHERIES AUTHORITY",  plat:"FLEET AI",              arr:9784, nsId:112429,  la:"30/3/2026"},
+  {id:"a15",name:"STONE WILL PTY LTD",             plat:"FLEET AI",              arr:9753, nsId:112229,  la:"19/3/2026"},
+  {id:"a16",name:"Adaptive Resources",             plat:"Australia 3 - AVM",    arr:9753, nsId:172546,  la:"12/9/2025"},
+  {id:"a17",name:"JMH Group WA Pty Ltd",           plat:"Australia 2",           arr:9432, nsId:54453,   la:"3/3/2026"},
+  {id:"a18",name:"Hawkesbury Cranes",              plat:"Australian",            arr:9003, nsId:9350,    la:"17/12/2025"},
+  {id:"a19",name:"Quinlan Cranes",                 plat:"Australia 2",           arr:8967, nsId:33210,   la:"7/8/2025"},
+  {id:"a20",name:"HRD Readymix Pty Ltd",           plat:"Australia 2",           arr:8526, nsId:26560,   la:"22/4/2025"},
+  {id:"a21",name:"Longreach Cranes",               plat:"Australia 2",           arr:8342, nsId:31863,   la:"24/11/2025"},
+  {id:"a22",name:"ACL Transport Pty Ltd",          plat:"Australia 2",           arr:7786, nsId:31750,   la:"24/12/2025"},
+  {id:"a23",name:"Absolute Crane Services",        plat:"IAP",                   arr:7813, nsId:218364,  la:"5/3/2026"},
+  {id:"a24",name:"Amundsen Trucking Pty Ltd",      plat:"FLEET AI",              arr:7352, nsId:126388,  la:"20/1/2025"},
+  {id:"a25",name:"Cirillo Civil Group Pty Ltd",    plat:"FLEET AI",              arr:9179, nsId:125652,  la:"28/5/2025"},
+  {id:"a26",name:"ABBE CORRUGATED PTY LTD",        plat:"FLEET AI",              arr:7813, nsId:110414,  la:"28/11/2025"},
+  {id:"a27",name:"Access Tree Services",           plat:"FLEET AI",              arr:7930, nsId:236262,  la:"14/8/2025"},
+  {id:"a28",name:"Cyneve Contracting Pty Ltd",     plat:"Australian",            arr:9106, nsId:9183,    la:"25/4/2026"},
+  {id:"a29",name:"Auscape Landscaping Pty Ltd",    plat:"Australia 2",           arr:7944, nsId:18336,   la:"17/12/2025"},
+  {id:"a30",name:"AGRI PARTS & REPAIRS",           plat:"Ezy2c",                 arr:7680, nsId:null,    la:null},
+  {id:"a31",name:"Abbca Developments Pty Ltd",     plat:"Australia 2",           arr:7488, nsId:null,    la:"10/10/2025"},
+  {id:"a32",name:"Advanced Cranes & Rigging",      plat:"Australia 2",           arr:7488, nsId:null,    la:"5/9/2025"},
+  {id:"a33",name:"Alukea Constructions Pty Ltd",   plat:"Australian",            arr:7680, nsId:null,    la:"12/7/2025"},
+  {id:"a34",name:"Ace Construction and Rigging",   plat:"Australia 2",           arr:7370, nsId:null,    la:null},
+  {id:"a35",name:"AB Crane Hire Pty Ltd",          plat:"Australia 2",           arr:7647, nsId:null,    la:"22/6/2025"},
+  {id:"a36",name:"Affordable Sanitation Services", plat:"Australia 2",           arr:7392, nsId:null,    la:null},
+  {id:"a37",name:"African Trans Pty Ltd",          plat:"Australia 2",           arr:7392, nsId:null,    la:null},
+  {id:"a38",name:"Ampelite Australia Pty Ltd",     plat:"Australia 2",           arr:7680, nsId:null,    la:"3/11/2025"},
+  {id:"a39",name:"Amanti Transport Pty Ltd",       plat:"Australia 2",           arr:7317, nsId:null,    la:null},
+  {id:"a40",name:"A & G Engineering Pty Ltd",      plat:"Australia 2",           arr:7531, nsId:null,    la:"18/8/2025"},
+];
+
+// ── STATE ─────────────────────────────────────────────────
+let rep = null, accs = [], view = "board", sort = "neglect", sel = null;
+
+function enrich(s){return {...s,upg:UPG[s.plat]||"FLEET AI Enterprise",leg:LEGACY.includes(s.plat),repId:null,stage:null,oppId:null,log:[]};}
+function save(){try{localStorage.setItem("nstar_t3_v3",JSON.stringify(accs))}catch(e){}}
+function load(){
+  try{
+    const d=localStorage.getItem("nstar_t3_v3");
+    if(d){const sv=JSON.parse(d);accs=SEED.map(s=>{const f=sv.find(x=>x.id===s.id);return f?{...enrich(s),...f}:enrich(s)});}
+    else accs=SEED.map(enrich);
+  }catch(e){accs=SEED.map(enrich);}
+}
+
+// ── UTILS ─────────────────────────────────────────────────
+function dmy(s){if(!s)return null;const p=s.split("/");return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):null;}
+function days(s){const d=dmy(s);return d?Math.round((TODAY-d)/86400000):null;}
+function todayStr(){return`${TODAY.getDate()}/${TODAY.getMonth()+1}/${TODAY.getFullYear()}`;}
+function $$(n){return"$"+Math.round(n).toLocaleString();}
+function cStatus(d){
+  if(d===null)return{cls:"cb-never",lbl:"Never contacted"};
+  if(d>=180)return{cls:"cb-ghost",lbl:`${d}d — Ghost`};
+  if(d>=90)return{cls:"cb-cold",lbl:`${d}d — Cold`};
+  if(d>=30)return{cls:"cb-warm",lbl:`${d}d — Warm`};
+  return{cls:"cb-fresh",lbl:`${d}d — Fresh`};
+}
+function platCls(a){return a.leg?"pt-legacy":a.plat==="FLEET AI"?"pt-fleet":a.plat.includes("Australia 3")?"pt-au3":"pt-other";}
+
+// ── API PROXY ─────────────────────────────────────────────
+async function claude(messages,system,useNS=false){
+  const r=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({messages,system,useNS})});
+  const d=await r.json();
+  if(d.error)throw new Error(d.error);
+  return(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
+}
+
+// ── NS ACTIONS ────────────────────────────────────────────
+async function nsLog(a,repName,type,notes,stage){
+  if(!a.nsId)return{ok:false,msg:"No NS ID"};
+  try{
+    const t=await claude([{role:"user",content:`Create a NetSuite activity for customer ${a.nsId} (${a.name}): type ${type}, title "T3 Upgrade - ${stage}", date ${todayStr()}, notes: ${notes}. Rep: ${repName}. Use ns_createRecord.`}],
+      "You are a NetSuite MCP assistant. Execute the operation and confirm success briefly.",true);
+    return{ok:true,msg:"Logged in NetSuite",detail:t};
+  }catch(e){return{ok:false,msg:e.message};}
+}
+async function nsCreateOpp(a,repName,stage,val,close,notes){
+  if(!a.nsId)return{ok:false,msg:"No NS ID"};
+  try{
+    const t=await claude([{role:"user",content:`Create NetSuite opportunity: entity ${a.nsId} (${a.name}), title "T3 Upgrade → ${a.upg}", expectedCloseDate ${close}, probability ${SPROB[stage]||10}, memo "Platform: ${a.plat} → ${a.upg}. ARR: ${$$(a.arr)}. Rep: ${repName}. ${notes}". Use ns_createRecord recordType opportunity.`}],
+      "You are a NetSuite MCP assistant. Create the record and confirm with the new ID.",true);
+    return{ok:true,msg:"Opportunity created",detail:t};
+  }catch(e){return{ok:false,msg:e.message};}
+}
+async function nsUpdateOpp(oppId,stage,notes,repName){
+  try{
+    const t=await claude([{role:"user",content:`Update NetSuite opportunity ${oppId}: set probability to ${SPROB[stage]||10}, memo "Stage: ${stage}. Rep: ${repName}. ${notes}. Updated ${todayStr()}". Use ns_updateRecord.`}],
+      "You are a NetSuite MCP assistant. Update the record and confirm.",true);
+    return{ok:true,msg:"NS updated",detail:t};
+  }catch(e){return{ok:false,msg:e.message};}
+}
+
+// ── LOGIN ─────────────────────────────────────────────────
+function login(id){
+  rep=id; load();
+  document.getElementById("login-screen").style.display="none";
+  document.getElementById("app").style.display="flex";
+  buildChips(); drawMetrics(); render();
+}
+function buildChips(){
+  document.getElementById("rep-chips").innerHTML=Object.entries(REPS).map(([id,r])=>
+    `<button class="rep-chip ${rep===id?'':'inactive'}" style="background:${r.col}" onclick="switchRep('${id}')">
+      <span class="chip-av">${r.ini}</span>${r.name.split(" ")[0]}
+    </button>`).join("");
+}
+function switchRep(id){
+  rep=id;
+  document.querySelectorAll(".rep-chip").forEach((b,i)=>b.classList.toggle("inactive",Object.keys(REPS)[i]!==id));
+  toast(`Switched to ${REPS[id].name}`,"success");
+}
+
+// ── METRICS ───────────────────────────────────────────────
+function drawMetrics(){
+  const tot=accs.reduce((s,a)=>s+a.arr,0);
+  const ghost=accs.filter(a=>{const d=days(a.la);return d!==null&&d>=180;}).length;
+  const never=accs.filter(a=>!a.la).length;
+  const pipe=accs.filter(a=>a.stage&&a.stage!=="Lost").length;
+  const won=accs.filter(a=>a.stage==="Won").reduce((s,a)=>s+a.arr*4,0);
+  document.getElementById("metrics").innerHTML=[
+    {l:"T3 Accounts",v:accs.length,c:"c-blue",s:"Total base"},
+    {l:"Total ARR",  v:$$(tot),    c:"c-green",s:"Recurring /yr"},
+    {l:"Ghost 180d+",v:ghost,      c:"c-red",  s:"Need contact"},
+    {l:"Never logged",v:never,     c:"c-amber",s:"No NS activity"},
+    {l:"In Pipeline", v:pipe,      c:"c-purple",s:"Active opps"},
+    {l:"Won ARR",     v:$$(won),   c:"c-green",s:"Upgrade value"},
+  ].map(m=>`<div class="metric"><div class="m-label">${m.l}</div><div class="m-val ${m.c}">${m.v}</div><div class="m-sub">${m.s}</div></div>`).join("");
+}
+
+// ── VIEW ──────────────────────────────────────────────────
+function setView(v){
+  view=v;
+  ["board","kanban","activity"].forEach(x=>{
+    const el=document.getElementById(x+"-view");
+    el.style.display=x===v?(v==="board"?"flex":"block"):"none";
+  });
+  document.querySelectorAll(".view-tab").forEach((b,i)=>b.classList.toggle("active",["board","kanban","activity"][i]===v));
+  render();
+}
+function setSort(s){
+  sort=s;["neglect","arr"].forEach(x=>document.getElementById("sb-"+x)?.classList.toggle("active",x===s));
+  render();
+}
+function filtered(){
+  const q=document.getElementById("q").value.toLowerCase();
+  const fs=document.getElementById("f-stage").value;
+  const fr=document.getElementById("f-rep").value;
+  const fc=document.getElementById("f-contact").value;
+  return accs.filter(a=>{
+    if(q&&!a.name.toLowerCase().includes(q)&&!a.plat.toLowerCase().includes(q))return false;
+    if(fs==="none"&&a.stage)return false;
+    if(fs&&fs!=="none"&&a.stage!==fs)return false;
+    if(fr&&a.repId!==fr)return false;
+    if(fc){const d=days(a.la);
+      if(fc==="ghost"&&(d===null||d<180))return false;
+      if(fc==="cold"&&(d===null||d<90||d>=180))return false;
+      if(fc==="never"&&d!==null)return false;
+      if(fc==="fresh"&&(d===null||d>=30))return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    if(sort==="arr")return b.arr-a.arr;
+    const da=days(a.la)??9999,db=days(b.la)??9999;
+    return(db+(b.leg?200:0))-(da+(a.leg?200:0));
+  });
+}
+function render(){
+  const data=filtered();
+  document.getElementById("fb-count").textContent=data.length+" accounts";
+  if(view==="board")drawBoard(data);
+  if(view==="kanban")drawKanban(data);
+  if(view==="activity")drawActivity();
+}
+
+// ── BOARD ─────────────────────────────────────────────────
+function drawBoard(data){
+  const tb=document.getElementById("tbody");
+  if(!data.length){tb.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:48px;color:var(--gray-mid)">No accounts match your filters</td></tr>`;return;}
+  tb.innerHTML=data.map(a=>{
+    const d=days(a.la);const{cls,lbl}=cStatus(d);
+    const sc=a.stage?SS[a.stage]:null;
+    const dots=Object.entries(REPS).map(([id,r])=>
+      `<button class="rdot ${a.repId===id?'':'off'}" title="${r.name}"
+        style="background:${a.repId===id?r.col:''};border-color:${a.repId===id?r.col:''}"
+        onclick="assignRep('${a.id}','${id}');event.stopPropagation()">${r.ini}</button>`).join("");
+    const sopts=`<option value="">— Not started</option>`+STAGES.map(s=>`<option ${a.stage===s?"selected":""}>${s}</option>`).join("");
+    return`<tr onclick="openBrief('${a.id}')">
+      <td>
+        <div class="acct-name">${a.name}</div>
+        <div class="acct-sub">${a.leg?'<span style="color:var(--red);font-weight:600">⚠ Legacy</span>':''}
+          ${a.nsId?`<span class="ns-dot-sm"></span>NS#${a.nsId}`:'<span style="color:var(--gray-mid)">No NS ID</span>'}
+          ${a.oppId?'· <span style="color:var(--green);font-weight:600">Opp ✓</span>':''}
+        </div>
+      </td>
+      <td><span class="plat-tag ${platCls(a)}">${a.plat}</span></td>
+      <td><div class="arr-val">${$$(a.arr)}</div><div class="arr-sub">/yr</div></td>
+      <td>
+        <span class="cb ${cls}">${lbl}</span>
+        ${a.la?`<div style="font-size:10px;color:var(--gray-mid);margin-top:2px">${a.la}</div>`:""}
+      </td>
+      <td><span class="upgrade-lbl">→ ${a.upg}</span></td>
+      <td onclick="event.stopPropagation()"><div class="rep-picker">${dots}</div></td>
+      <td onclick="event.stopPropagation()">
+        <select class="stage-sel" style="${sc?`background:${sc.bg};color:${sc.tx};border-color:${sc.dot}`:""}"
+          onchange="moveStage('${a.id}',this.value)">${sopts}</select>
+      </td>
+      <td onclick="event.stopPropagation()">
+        <div class="act-btns">
+          <button class="abt abt-ai"  title="AI Sales Brief"     onclick="openBrief('${a.id}')">✨</button>
+          <button class="abt abt-log" title="Log Activity"       onclick="openLog('${a.id}')">📞</button>
+          <button class="abt abt-opp" title="Create Opportunity"  onclick="openOpp('${a.id}')">➕</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+// ── KANBAN ────────────────────────────────────────────────
+function drawKanban(data){
+  document.getElementById("kanban-wrap").innerHTML=STAGES.map(stage=>{
+    const s=SS[stage];
+    const cards=data.filter(a=>a.stage===stage);
+    const tarr=cards.reduce((t,a)=>t+a.arr,0);
+    return`<div class="k-lane">
+      <div class="k-head" style="border-color:${s.dot}">
+        <span class="k-title" style="color:${s.dot}">${stage}</span>
+        <span class="k-count" style="background:${s.bg};color:${s.tx}">${cards.length}</span>
+      </div>
+      ${tarr>0?`<div class="k-arr">${$$(tarr)}</div>`:""}
+      <div class="k-cards">
+        ${cards.length?cards.map(a=>{
+          const d=days(a.la);const r=a.repId?REPS[a.repId]:null;
+          const mvs=STAGES.filter(x=>x!==stage).slice(0,3).map(x=>
+            `<button class="kmv" style="background:${SS[x].bg};color:${SS[x].tx};border-color:${SS[x].dot}"
+              onclick="moveStage('${a.id}','${x}');event.stopPropagation()">→${x}</button>`).join("");
+          return`<div class="kcard" onclick="openBrief('${a.id}')">
+            <div class="kc-name">${a.name}</div>
+            <div class="kc-plat">${a.plat}</div>
+            <div class="kc-row">
+              <span class="kc-arr">${$$(a.arr)}</span>
+              ${d!==null?`<span class="kc-days" style="color:${d>180?'var(--red)':d>90?'var(--amber)':'var(--gray-mid)'}">${d}d ago</span>`:""}
+            </div>
+            <div class="kc-foot">
+              <span class="kc-up">→${a.upg}</span>
+              ${r?`<span class="kc-rep" style="background:${r.col}">${r.ini}</span>`:""}
+            </div>
+            <div class="k-moves" onclick="event.stopPropagation()">${mvs}</div>
+          </div>`;
+        }).join(""):`<div class="k-empty">No accounts</div>`}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ── ACTIVITY ──────────────────────────────────────────────
+function drawActivity(){
+  const logs=accs.flatMap(a=>(a.log||[]).map(l=>({...l,an:a.name,rc:a.repId?REPS[a.repId]?.col:"#9A9A96"})))
+    .sort((a,b)=>(dmy(b.date)||0)-(dmy(a.date)||0));
+  const el=document.getElementById("activity-view");
+  if(!logs.length){el.innerHTML=`<div class="act-empty">📞 No activities logged yet.<br><span style="font-size:12px">Use the Board view to log calls, emails and meetings — they'll appear here.</span></div>`;return;}
+  el.innerHTML=logs.map(l=>{
+    const em=l.type==="Call"?"📞":l.type==="Email"?"✉️":l.type==="Meeting"?"🤝":l.type==="Demo"?"💻":"📝";
+    return`<div class="act-row">
+      <div class="act-icon" style="background:${l.rc}">${em}</div>
+      <div class="act-body">
+        <div class="act-head">${l.an} <span>— ${l.outcome}</span></div>
+        ${l.notes?`<div class="act-note">${l.notes}</div>`:""}
+        ${l.nextAction?`<div class="act-next">Next: ${l.nextAction}${l.nextDate?" ("+l.nextDate+")":""}</div>`:""}
+      </div>
+      <div class="act-meta">
+        <div class="act-date">${l.date}</div>
+        <div class="act-rep">${l.rep?.split(" ")[0]||""}</div>
+        <span class="ns-synced">NS ✓</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+// ── ASSIGN ────────────────────────────────────────────────
+function assignRep(id,rid){
+  accs=accs.map(a=>a.id===id?{...a,repId:rid}:a);
+  save();drawMetrics();render();
+  toast(`Assigned to ${REPS[rid].name}`,"success");
+}
+
+// ── STAGE ────────────────────────────────────────────────
+async function moveStage(id,stage){
+  const a=accs.find(x=>x.id===id);if(!a)return;
+  accs=accs.map(x=>x.id===id?{...x,stage:stage||null}:x);
+  save();drawMetrics();render();
+  if(a.oppId&&stage){
+    toast("Syncing to NetSuite…","warn");
+    const r=await nsUpdateOpp(a.oppId,stage,`Moved to ${stage}`,REPS[rep].name);
+    toast(r.ok?`Stage → ${stage} (NS synced ✓)`:`Stage moved (NS: ${r.msg})`,r.ok?"success":"warn");
+  }else{
+    toast(stage?`Moved to ${stage}`:"Removed from pipeline","success");
+  }
+}
+
+// ── AI BRIEF ─────────────────────────────────────────────
+function openBrief(id){
+  sel=accs.find(a=>a.id===id);if(!sel)return;
+  const d=days(sel.la);
+  const ctxt=d!==null?`Last contact: ${d} days ago (${sel.la})`:"No contact on record";
+  document.getElementById("mtitle").textContent=`✨ AI Brief — ${sel.name}`;
+  document.getElementById("mbody").innerHTML=`
+    <div class="brief-loader" id="bload"><div class="brief-ring"></div><span style="color:var(--gray-mid)">Generating personalised brief…</span></div>
+    <div id="bcontent" style="display:none"></div>
+    <div id="bfoot" class="mfoot" style="display:none">
+      <button class="btn-g" onclick="closeModal()">Close</button>
+      <button class="btn-p" onclick="closeModal();openLog('${id}')">📞 Log Call</button>
+      <button class="btn-p green" onclick="closeModal();openOpp('${id}')">➕ Create Opp</button>
+    </div>`;
+  showOverlay();
+  claude([{role:"user",content:`Sales call brief for Netstar Australia T3 upgrade:
+
+Account: ${sel.name}
+Platform: ${sel.plat}${sel.leg?" (LEGACY — migration opportunity)":""}
+Recurring ARR: ${$$(sel.arr)}/year
+Recommended upgrade: ${sel.upg}
+${ctxt}
+Pipeline stage: ${sel.stage||"Not started"}
+
+3 punchy paragraphs — no headings, no bullets:
+1. Re-engagement opener specific to their platform age and contact gap
+2. Upgrade value prop — concrete gains from ${sel.plat} → ${sel.upg}
+3. Recommended next step + one likely objection with a one-line rebuttal
+
+Max 180 words. Conversational, direct, confident.`}])
+  .then(txt=>{
+    document.getElementById("bload").style.display="none";
+    document.getElementById("bcontent").style.display="block";
+    document.getElementById("bcontent").innerHTML=`<div class="brief-text">${txt.split(/\n\n+/).map(p=>`<p>${p}</p>`).join("")}</div>`;
+    document.getElementById("bfoot").style.display="flex";
+  })
+  .catch(e=>{
+    document.getElementById("bload").innerHTML=`<div style="color:var(--red);padding:16px;text-align:center;line-height:1.6">
+      ⚠ Could not generate brief<br><span style="font-size:11px;color:var(--gray-mid)">${e.message}</span></div>`;
+  });
+}
+
+// ── LOG MODAL ────────────────────────────────────────────
+function openLog(id){
+  sel=accs.find(a=>a.id===id);if(!sel)return;
+  document.getElementById("mtitle").textContent=`📞 Log Activity — ${sel.name}`;
+  document.getElementById("mbody").innerHTML=`
+    <div class="info-strip">
+      <div class="is-item"><span>Platform</span><strong>${sel.plat}</strong></div>
+      <div class="is-item"><span>ARR</span><strong>${$$(sel.arr)}</strong></div>
+      <div class="is-item"><span>Last contact</span><strong>${sel.la||"Never"}</strong></div>
+    </div>
+    <div class="field"><label>Activity type</label>
+      <select id="lt"><option>Call</option><option>Email</option><option>Meeting</option><option>Demo</option><option>LinkedIn</option></select></div>
+    <div class="field"><label>Outcome</label>
+      <select id="lo">
+        <option>Spoke to contact</option><option>Left voicemail</option><option>No answer</option>
+        <option>Email sent</option><option>Replied — interested</option><option>Replied — not now</option>
+        <option>Meeting booked</option><option>Demo scheduled</option><option>Proposal requested</option><option>Not interested</option>
+      </select></div>
+    <div class="field"><label>Notes</label>
+      <textarea id="ln" placeholder="What was discussed? Key signals, objections, upgrade interest…"></textarea></div>
+    <div class="field"><label>Next action</label>
+      <input id="lna" placeholder="e.g. Send upgrade comparison doc"/></div>
+    <div class="field"><label>Follow-up date</label>
+      <input id="lnd" placeholder="DD/MM/YYYY"/></div>
+    <div class="mfoot">
+      <button class="btn-g" onclick="closeModal()">Cancel</button>
+      <button class="btn-p" id="lsub" onclick="submitLog()">
+        <span id="lspin" style="display:none" class="spin"></span>Log + Sync NetSuite ✓
+      </button>
+    </div>`;
+  showOverlay();
+}
+async function submitLog(){
+  const btn=document.getElementById("lsub"),sp=document.getElementById("lspin");
+  btn.disabled=true;sp.style.display="inline-block";
+  const type=document.getElementById("lt").value,out=document.getElementById("lo").value,
+    notes=document.getElementById("ln").value,na=document.getElementById("lna").value,
+    nd=document.getElementById("lnd").value,rn=REPS[rep].name;
+  const entry={date:todayStr(),type,outcome:out,notes,nextAction:na,nextDate:nd,rep:rn};
+  accs=accs.map(a=>a.id===sel.id?{...a,la:todayStr(),log:[entry,...(a.log||[])]}:a);
+  save();drawMetrics();render();
+  const r=await nsLog(sel,rn,type,notes,sel.stage||"Identified");
+  closeModal();
+  toast(r.ok?`Activity logged + NetSuite updated ✓`:`Logged locally (NS: ${r.msg})`,r.ok?"success":"warn");
+}
+
+// ── OPP MODAL ────────────────────────────────────────────
+function openOpp(id){
+  sel=accs.find(a=>a.id===id);if(!sel)return;
+  document.getElementById("mtitle").textContent=`➕ Create Opportunity — ${sel.name}`;
+  document.getElementById("mbody").innerHTML=`
+    <div class="info-strip">
+      <div class="is-item"><span>Current stack</span><strong>${sel.plat}</strong></div>
+      <div class="is-item"><span>ARR</span><strong>${$$(sel.arr)}</strong></div>
+      <div class="is-item"><span>Upgrade to</span><strong>${sel.upg}</strong></div>
+    </div>
+    <div class="field"><label>Pipeline stage</label>
+      <select id="os"><option>Identified</option><option selected>Outreach</option><option>Discovery</option><option>Proposal</option></select></div>
+    <div class="field"><label>Projected value ($AUD)</label>
+      <input type="number" id="ov" placeholder="${sel.arr*4} (4× current ARR)"/></div>
+    <div class="field"><label>Expected close date</label>
+      <input id="oc" value="31/12/2026" placeholder="DD/MM/YYYY"/></div>
+    <div class="field"><label>Notes for NetSuite</label>
+      <textarea id="on" placeholder="Key context, triggers, decision makers…"></textarea></div>
+    <div class="mfoot">
+      <button class="btn-g" onclick="closeModal()">Cancel</button>
+      <button class="btn-p green" id="osub" onclick="submitOpp()">
+        <span id="ospin" style="display:none" class="spin"></span>Create + Sync NetSuite ✓
+      </button>
+    </div>`;
+  showOverlay();
+}
+async function submitOpp(){
+  const btn=document.getElementById("osub"),sp=document.getElementById("ospin");
+  btn.disabled=true;sp.style.display="inline-block";
+  const stage=document.getElementById("os").value,val=parseFloat(document.getElementById("ov").value)||sel.arr*4,
+    close=document.getElementById("oc").value||"31/12/2026",notes=document.getElementById("on").value,rn=REPS[rep].name;
+  const r=await nsCreateOpp(sel,rn,stage,val,close,notes);
+  const fakeId=r.ok?`OPP-${Date.now()}`:null;
+  accs=accs.map(a=>a.id===sel.id?{...a,stage,oppId:fakeId,repId:rep}:a);
+  save();drawMetrics();render();
+  closeModal();
+  toast(r.ok?`Opportunity created in NetSuite ✓`:`Created locally (NS: ${r.msg})`,r.ok?"success":"warn");
+}
+
+// ── OVERLAY ───────────────────────────────────────────────
+function showOverlay(){document.getElementById("overlay").style.display="flex";}
+function closeModal(e){
+  if(!e||e.target===document.getElementById("overlay")){
+    document.getElementById("overlay").style.display="none";sel=null;
+  }
+}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal({target:document.getElementById("overlay")});});
+
+// ── TOAST ─────────────────────────────────────────────────
+function toast(msg,type="success"){
+  const el=document.getElementById("toast");
+  el.textContent=msg;el.className=type+" show";
+  setTimeout(()=>el.classList.remove("show"),3400);
+}
+</script>
+</body>
+</html>
