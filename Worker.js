@@ -869,7 +869,15 @@ if (url.pathname === '/orica-tracker' || url.pathname === '/orica-tracker/') {
   return new Response('Tracker not yet deployed. Upload orica-tracker-html to KV.', { status: 404 });
 }
 
-// ── ORICA TRACKER: KV Data API (GET) ──────────────────────────────────────
+if (url.pathname === '/orica-tracker' || url.pathname === '/orica-tracker/') {
+    const html = await env.kv_storage.get('orica-tracker-html');
+    if (html) {
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+      });
+    }
+    return new Response('KV key orica-tracker-html not found', { status: 404 });
+  }// ── ORICA TRACKER: KV Data API (GET) ──────────────────────────────────────
 if (url.pathname === '/orica-issues-data' && request.method === 'GET') {
   const data = await env.kv_storage.get('orica-issues-data');
   if (data) {
