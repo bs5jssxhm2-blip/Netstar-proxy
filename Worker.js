@@ -853,4 +853,65 @@ export default {
 
     return errorResponse("Unknown route: " + path, 404);
   },
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD THESE ROUTES TO YOUR Worker.js (inside the main fetch handler)
+// Place them alongside your existing route blocks
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── ORICA TRACKER: Serve HTML ──────────────────────────────────────────────
+if (url.pathname === '/orica-tracker' || url.pathname === '/orica-tracker/') {
+  const html = await env.kv_storage.get('orica-tracker-html');
+  if (html) {
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+    });
+  }
+  return new Response('Tracker not yet deployed. Upload orica-tracker-html to KV.', { status: 404 });
+}
+
+// ── ORICA TRACKER: KV Data API (GET) ──────────────────────────────────────
+if (url.pathname === '/orica-issues-data' && request.method === 'GET') {
+  const data = await env.kv_storage.get('orica-issues-data');
+  if (data) {
+    return new Response(data, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-store'
+      }
+    });
+  }
+  return new Response(JSON.stringify({ issues: [] }), {
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+  });
+}
+
+// ── ORICA TRACKER: KV Data API (POST) ─────────────────────────────────────
+if (url.pathname === '/orica-issues-data' && request.method === 'POST') {
+  try {
+    const body = await request.json();
+    if (!body || !Array.isArray(body.issues)) {
+      return new Response(JSON.stringify({ error: 'Invalid payload' }), { status: 400 });
+    }
+    await env.kv_storage.put('orica-issues-data', JSON.stringify(body));
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch(e) {
+    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+  }
+}
+
+// ── ORICA TRACKER: CORS preflight ─────────────────────────────────────────
+if (url.pathname === '/orica-issues-data' && request.method === 'OPTIONS') {
+  return new Response(null, {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    }
+  });
+}};
