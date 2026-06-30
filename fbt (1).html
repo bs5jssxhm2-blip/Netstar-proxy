@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FTC Tool">
+<title>Netstar FBT Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f0f2f5; --surface:#ffffff; --surface2:#f5f7fa; --border:#e0e4ea; --border2:#c8cdd6;
+  --text:#1a2332; --muted:#5a6a7e; --hint:#8896a8;
+  --blue:#1a5fba; --teal:#0d8a6a; --orange:#d4600a; --green:#0d7a4a; --green2:#e8f5ef;
+  --red:#cc2020; --amber:#b86800; --amberBg:#fff8e8;
+  --mono:'IBM Plex Mono',monospace; --body:'DM Sans',sans-serif;
+  --radius:10px; --radius-sm:6px; --shadow:0 2px 12px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 64px}
+
+header{background:linear-gradient(135deg,#0b1e35,#16335a);color:#fff;border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow)}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#9fc0ec}
+h1{font-size:22px;font-weight:700;margin:4px 0 2px}
+.sub{font-size:13px;color:#b9cae0}
+
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.tile .lab{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tile .val{font-family:var(--mono);font-size:24px;font-weight:600;margin-top:6px}
+.tile.total{background:#eef4fc;border-color:#cadcf3}
+.tile.total .val{color:var(--blue)}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
+.card h2{font-size:14px;font-weight:600;padding:13px 16px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;gap:9px}
+.card h2 .dot{width:7px;height:7px;border-radius:50%;background:var(--blue)}
+.pad{padding:14px 16px}
+
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.field input,.field select{font-family:var(--body);font-size:14px;padding:9px 11px;border:1px solid var(--border2);border-radius:var(--radius-sm);background:#fff;color:var(--text)}
+.field input:focus,.field select:focus{outline:none;border-color:var(--blue)}
+.note{font-size:12px;color:var(--muted);line-height:1.55}
+
+button{font-family:var(--body);font-size:13px;font-weight:600;border:none;border-radius:var(--radius-sm);padding:10px 16px;cursor:pointer}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:#fff;color:var(--blue);border:1px solid var(--border2)}
+
+textarea{width:100%;font-family:var(--mono);font-size:12px;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:9px;resize:vertical}
+
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:920px;font-size:13px}
+th,td{padding:8px 9px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+th{background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+td.num{text-align:right;font-family:var(--mono)}
+tr:hover td{background:#fafcff}
+td input,td select{font-family:var(--body);font-size:12px;padding:5px 6px;border:1px solid var(--border);border-radius:5px;width:100%;background:#fff}
+td input.money{text-align:right;font-family:var(--mono)}
+
+.badge{display:inline-block;font-size:10px;font-weight:600;padding:3px 8px;border-radius:999px;letter-spacing:.02em}
+.b-tax{background:#eef4fc;color:var(--blue)}
+.b-ok{background:var(--green2);color:var(--green)}
+.b-warn{background:var(--amberBg);color:var(--amber)}
+.b-rev{background:#fbe9e6;color:var(--orange)}
+.reason{font-size:11px;color:var(--muted);white-space:normal;max-width:250px;line-height:1.4}
+
+.disclaimer{font-size:12px;color:var(--muted);line-height:1.6;border-left:3px solid var(--amber);background:var(--surface);
+  padding:11px 15px;border-radius:0 var(--radius) var(--radius) 0;border-top:1px solid var(--border);border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+code{font-family:var(--mono);background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px}
+.status-line{font-size:12px;color:var(--muted);margin-left:6px}
+details{margin-top:10px}
+summary{font-size:12px;font-weight:600;color:var(--blue);cursor:pointer}
+
+@media(max-width:720px){.tiles{grid-template-columns:repeat(2,1fr)}h1{font-size:19px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Netstar Australia &middot; FTC Tool</div>
+    <h1>FBT &mdash; Car Fringe Benefits</h1>
+    <div class="sub">Make/model exemption screen + ATO statutory formula &middot; FBT year ending 31 March 2026</div>
+  </header>
+
+  <div class="tiles">
+    <div class="tile total"><div class="lab">Total FBT payable</div><div class="val" id="t-fbt">$0</div></div>
+    <div class="tile"><div class="lab">FBT applies</div><div class="val" id="t-tax">0</div></div>
+    <div class="tile"><div class="lab">Likely exempt</div><div class="val" id="t-exempt">0</div></div>
+    <div class="tile"><div class="lab">Needs review</div><div class="val" id="t-review">0</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot"></span>Fleet &amp; settings</h2>
+    <div class="pad">
+      <div class="row">
+        <div class="field">
+          <label>Client</label>
+          <select id="client">
+            <option value="shaun">shaun (admin)</option>
+            <option value="lakemacquarie" selected>lakemacquarie</option>
+            <option value="demo">demo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>FBT year</label>
+          <select id="fbtYear">
+            <option value="2025-26" selected>2025&ndash;26</option>
+            <option value="2026-27">2026&ndash;27</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Gross-up</label>
+          <select id="grossType">
+            <option value="1" selected>Type 1 (2.0802)</option>
+            <option value="2">Type 2 (1.8868)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Default days available</label>
+          <input id="defDays" type="number" min="0" max="366" value="365" style="width:90px">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn-primary" id="loadLive">Load live fleet</button>
+        </div>
+        <div class="status-line" id="loadStatus"></div>
+      </div>
+      <p class="note" style="margin-top:10px">Pulls the live fleet from your FTC worker (<code>/fleetai/fbt-data</code>), enriching make/model/type per vehicle from the object-status feed, and classifies every vehicle automatically. Statutory rate is a flat <strong>20%</strong>; councils pay FBT in full (no rebate/exemption cap applied).</p>
+
+      <details>
+        <summary>Make/model coming through wrong? Overlay Rick&#x2019;s object-status feed</summary>
+        <p class="note" style="margin:8px 0">If the live list shows device codes (e.g. <code>FMC130</code>) or blanks instead of real makes, paste the <code>object-status</code> response here to overwrite make/model by IMEI/asset.</p>
+        <textarea id="osPaste" rows="3" placeholder='{ "data": [ { "0bject_name": "717702 Tony Robb", "brand": "Isuzu", "model": "Dmax", "imei_no": "..." } ] }'></textarea>
+        <button class="btn-ghost" id="applyOverlay" style="margin-top:8px">Apply make/model overlay</button>
+      </details>
+
+      <details>
+        <summary>Bulk-add base values from the council register</summary>
+        <p class="note" style="margin:8px 0">Paste one vehicle per line as <code>rego,basevalue</code> (e.g. <code>717702,52000</code>). Matched by registration/asset number.</p>
+        <textarea id="bvPaste" rows="3" placeholder="717702,52000&#10;AB12CD,38500"></textarea>
+        <button class="btn-ghost" id="applyBV" style="margin-top:8px">Apply base values</button>
+      </details>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot"></span>Vehicles</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th>Asset / Rego</th><th>Driver</th><th>Make</th><th>Model</th><th>Fuel</th>
+          <th class="num">GVM</th><th class="num">Base value</th><th class="num">Days</th><th class="num">Contrib.</th>
+          <th>Status</th><th>Why</th><th class="num">Taxable</th><th class="num">FBT</th>
+        </tr></thead>
+        <tbody id="rows"><tr><td colspan="13" style="padding:22px;text-align:center;color:var(--muted)">Click <strong>Load live fleet</strong> to pull your vehicles, or add one manually.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pad" style="border-top:1px solid var(--border);background:var(--surface2)">
+      <button class="btn-ghost" id="addRow">+ Add vehicle</button>
+      <button class="btn-ghost" id="exportCsv">Export CSV</button>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <strong>Indicative figures only.</strong> Classification is automated from make/model; the workhorse (commercial) and dual-cab exemptions also depend on private use being limited to home&harr;work plus minor, infrequent trips, which this tool can&#x2019;t verify. Eligible electric vehicles are FBT-exempt but still carry a Reportable Fringe Benefits Amount. Base values come from the council fleet register. Confirm classifications, base values and method with the council&#x2019;s tax adviser before lodging an FBT return.
+  </div>
+</div>
+
+<script>
+const BASE = location.origin.includes("workers.dev") ? location.origin : "https://tight-dream-d2e5.shaunbr.workers.dev";
+
+/* ---- RATES (ATO, confirmed Jun 2026) ---- */
+const RATES = {
+  "2025-26": { fbt:0.47, statutory:0.20, gu1:2.0802, gu2:1.8868, days:365, evThreshold:91387 },
+  "2026-27": { fbt:0.47, statutory:0.20, gu1:2.0802, gu2:1.8868, days:365, evThreshold:91387 }
+};
+
+/* ---- CLASSIFIER ---- */
+const WORKHORSE=['hiace','transit','master','trafic','vito','sprinter','daily','canter','iveco','caddy','express','partner','berlingo','dispatch','boxer','ducato','transporter','crafter','truck'];
+const PASSENGER=['camry','corolla','aurion','commodore','falcon','cerato','i30','golf','mazda3','mazda6','kluger','rav4','cx-5','cx-9','cx5','cx9','outlander','tucson','santa fe','sorento','prado','pajero','everest','mu-x','mux','territory','x-trail','xtrail','forester','outback','kona','seltos','asx','cx-3','cx-30','camry'];
+const EV_FUELS=['ev','bev','electric','fcev','hydrogen'];
+const EV_MODELS=['tesla','polestar','byd','ioniq','ev6','leaf','zs ev','atto','dolphin','model 3','model y','e-tron','id.4','id.3'];
+const DEVICE_JUNK=/^(fm[bcu]?\d|teltonika|concox|queclink|—|-|n\/?a)$/i;
+
+function classifyVehicle(v, year){
+  const r=RATES[year];
+  const make=(v.make||'').toLowerCase().trim();
+  const model=(v.model||'').toLowerCase().trim();
+  const fuel=(v.fuel||'').toLowerCase().trim();
+  const vtype=(v.vtype||'').toLowerCase().trim();
+  const hay=(make+' '+model+' '+(vtype==='default'?'':vtype)).trim();
+  const base=Number(v.baseValue)||0;
+  const gvm=Number(v.gvm)||0;
+
+  if(!hay || DEVICE_JUNK.test(make) || DEVICE_JUNK.test(model))
+    return {status:'review',label:'Review',badge:'b-rev',reason:'Make/model missing or showing a device code in the feed \u2014 enter the real make/model, or use the object-status overlay above.'};
+
+  const isEV=EV_FUELS.includes(fuel)||EV_MODELS.some(m=>hay.includes(m));
+  if(isEV){
+    if(base>0&&base<=r.evThreshold) return {status:'exempt-ev',label:'Exempt \u2014 EV',badge:'b-ok',reason:`Eligible EV under $${r.evThreshold.toLocaleString()}. FBT-exempt but still a Reportable Fringe Benefit. Confirm first held on/after 1 Jul 2022.`};
+    if(base>r.evThreshold) return {status:'taxable',label:'FBT applies',badge:'b-tax',reason:`Electric but base value over the $${r.evThreshold.toLocaleString()} threshold \u2014 exemption doesn\u2019t apply.`};
+    return {status:'review',label:'Review',badge:'b-rev',reason:'Electric \u2014 add base value to confirm it\u2019s under the EV exemption threshold.'};
+  }
+
+  if(gvm>=4500) return {status:'exempt-workhorse',label:'Likely exempt',badge:'b-ok',reason:`Heavy vehicle (GVM ${gvm.toLocaleString()}kg). Not a car for FBT; exempt if private use is limited.`};
+
+  const isUte=/ute|cab chassis|hilux|ranger|triton|d-?max|navara|colorado|bt-?50|amarok/.test(hay);
+  const single=/single|s\/?cab/.test(hay);
+  const dual=/dual|d\/?cab|crew/.test(hay);
+
+  if(WORKHORSE.some(w=>hay.includes(w))||(isUte&&single))
+    return {status:'exempt-workhorse',label:'Likely exempt',badge:'b-ok',reason:'Commercial / workhorse vehicle not principally designed to carry passengers. Exempt if private use is limited to home\u2194work plus minor, infrequent trips.'};
+
+  if(isUte&&dual) return {status:'review',label:'Review',badge:'b-warn',reason:'Dual-cab ute. Exempt only if it carries \u22651 tonne or isn\u2019t principally for passengers, AND private use is limited (ATO MT 2024/1).'};
+  if(isUte) return {status:'review',label:'Review',badge:'b-warn',reason:'Ute \u2014 confirm single vs dual cab. Single-cab normally exempt; dual-cab needs the load/passenger test.'};
+
+  if(PASSENGER.some(p=>hay.includes(p))) return {status:'taxable',label:'FBT applies',badge:'b-tax',reason:'Passenger vehicle available for private use \u2014 taxed under the statutory formula.'};
+  return {status:'review',label:'Review',badge:'b-warn',reason:'Body type unclear from make/model \u2014 confirm whether it\u2019s a passenger car or commercial vehicle.'};
+}
+
+/* ---- STATUTORY FORMULA ---- */
+function calcStatutoryFBT(v, year, grossType, defaultDays){
+  const r=RATES[year];
+  const base=Number(v.baseValue)||0;
+  const days=(v.days===''||v.days==null)?defaultDays:Number(v.days);
+  const contrib=Number(v.contrib)||0;
+  const gu=grossType==='2'?r.gu2:r.gu1;
+  if(base<=0) return {taxable:null,fbt:null};
+  let taxable=base*r.statutory*(days/r.days)-contrib;
+  if(taxable<0) taxable=0;
+  return {taxable, fbt:taxable*gu*r.fbt};
+}
+
+/* ---- object-status adapter (Rick's feed) ---- */
+function parseObjectStatus(input){
+  let arr=[];
+  try{ const j=(typeof input==='string')?JSON.parse(input):input; arr=j.data||j||[]; }catch(e){ return []; }
+  if(!Array.isArray(arr)) return [];
+  return arr.map(o=>{
+    const objName=o['0bject_name']||o['object_name']||'';
+    return { asset:(String(objName).trim().split(/\s+/)[0]||'').trim(), imei:o.imei_no||'', make:o.brand||'', model:o.model||'' };
+  });
+}
+
+/* ---- UI ---- */
+let data=[];
+const $=id=>document.getElementById(id);
+const fmt=n=>n==null?'\u2014':'$'+Math.round(n).toLocaleString();
+
+function render(){
+  const year=$('fbtYear').value, gt=$('grossType').value, defDays=Number($('defDays').value)||365;
+  const tb=$('rows');
+  if(!data.length){ tb.innerHTML='<tr><td colspan="13" style="padding:22px;text-align:center;color:var(--muted)">No vehicles loaded. Click <strong>Load live fleet</strong> or add one manually.</td></tr>'; }
+  else { tb.innerHTML=''; }
+  let totalFbt=0,nTax=0,nExempt=0,nReview=0;
+
+  data.forEach((v,i)=>{
+    const cls=classifyVehicle(v,year);
+    let taxable=null,fbt=null;
+    if(cls.status==='taxable'){ const c=calcStatutoryFBT(v,year,gt,defDays); taxable=c.taxable; fbt=c.fbt; if(fbt)totalFbt+=fbt; nTax++; }
+    else if(cls.status==='review'){ nReview++; } else { nExempt++; }
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><input value="${v.asset||''}" data-i="${i}" data-k="asset" style="width:90px"></td>
+      <td style="font-size:12px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis">${v.driver||''}</td>
+      <td><input value="${v.make||''}" data-i="${i}" data-k="make" style="width:80px"></td>
+      <td><input value="${v.model||''}" data-i="${i}" data-k="model" style="width:130px"></td>
+      <td><input value="${v.fuel||''}" data-i="${i}" data-k="fuel" style="width:64px"></td>
+      <td class="num">${v.gvm?Number(v.gvm).toLocaleString():'\u2014'}</td>
+      <td class="num"><input class="money" type="number" value="${v.baseValue??''}" data-i="${i}" data-k="baseValue" style="width:84px"></td>
+      <td class="num"><input class="money" type="number" value="${v.days??''}" data-i="${i}" data-k="days" placeholder="${defDays}" style="width:54px"></td>
+      <td class="num"><input class="money" type="number" value="${v.contrib??''}" data-i="${i}" data-k="contrib" style="width:74px"></td>
+      <td><span class="badge ${cls.badge}">${cls.label}</span></td>
+      <td><div class="reason">${cls.reason}</div></td>
+      <td class="num">${fmt(taxable)}</td>
+      <td class="num"><strong>${fmt(fbt)}</strong></td>`;
+    tb.appendChild(tr);
+  });
+  $('t-fbt').textContent=fmt(totalFbt); $('t-tax').textContent=nTax; $('t-exempt').textContent=nExempt; $('t-review').textContent=nReview;
+}
+
+$('rows').addEventListener('input',e=>{
+  const i=e.target.dataset.i,k=e.target.dataset.k; if(i==null)return;
+  let val=e.target.value;
+  if(['baseValue','days','contrib'].includes(k)) val=val===''?'':Number(val);
+  data[i][k]=val; render();
+});
+
+async function loadLive(){
+  const client=$('client').value, st=$('loadStatus'), btn=$('loadLive');
+  btn.disabled=true; st.textContent='Loading\u2026';
+  try{
+    const res=await fetch(`${BASE}/fleetai/fbt-data?client=${client}`);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const j=await res.json();
+    const list=j.vehicles||[];
+    data=list.map(v=>({ asset:v.registration||v.imei||'', imei:v.imei||'', driver:v.driver||'', make:v.make||'', model:v.model||'', vtype:v.vehicle_type||'', fuel:v.fuel_type||'', gvm:v.gvm_kg||0, baseValue:'', days:'', contrib:0 }));
+    st.textContent=`Loaded ${data.length} vehicles. Add base values to compute FBT dollars.`;
+    render();
+  }catch(e){ st.textContent='Couldn\u2019t load: '+e.message+' \u2014 check the client and that the worker is up.'; }
+  finally{ btn.disabled=false; }
+}
+
+$('loadLive').onclick=loadLive;
+$('addRow').onclick=()=>{ data.push({asset:'',driver:'',make:'',model:'',fuel:'',gvm:0,baseValue:'',days:'',contrib:0}); render(); };
+
+$('applyOverlay').onclick=()=>{
+  const os=parseObjectStatus($('osPaste').value.trim());
+  if(!os.length){ alert('No vehicles read from that paste \u2014 include the full JSON with the "data" array.'); return; }
+  const byAsset={},byImei={};
+  os.forEach(o=>{ if(o.asset)byAsset[String(o.asset)]=o; if(o.imei)byImei[String(o.imei)]=o; });
+  let n=0;
+  data.forEach(v=>{ const m=byImei[String(v.imei)]||byAsset[String(v.asset)]; if(m){ if(m.make)v.make=m.make; if(m.model)v.model=m.model; n++; } });
+  render(); alert(`Updated make/model on ${n} vehicle(s).`);
+};
+
+$('applyBV').onclick=()=>{
+  const lines=$('bvPaste').value.trim().split(/\r?\n/).filter(Boolean);
+  const map={}; lines.forEach(l=>{ const [a,b]=l.split(/[,\t]/); if(a&&b)map[a.trim()]=Number(b.replace(/[^0-9.]/g,'')); });
+  let n=0; data.forEach(v=>{ if(map[String(v.asset)]!=null){ v.baseValue=map[String(v.asset)]; n++; } });
+  render(); alert(`Applied base values to ${n} vehicle(s).`);
+};
+
+$('exportCsv').onclick=()=>{
+  const year=$('fbtYear').value,gt=$('grossType').value,defDays=Number($('defDays').value)||365;
+  const head=['Asset','Driver','Make','Model','Fuel','GVM','BaseValue','Days','Contribution','Status','TaxableValue','FBT'];
+  const rows=data.map(v=>{ const c=classifyVehicle(v,year); let t='',f=''; if(c.status==='taxable'){ const r=calcStatutoryFBT(v,year,gt,defDays); t=r.taxable!=null?Math.round(r.taxable):''; f=r.fbt!=null?Math.round(r.fbt):''; } return [v.asset,v.driver,v.make,v.model,v.fuel,v.gvm,v.baseValue,(v.days===''?defDays:v.days),v.contrib,c.label,t,f]; });
+  const csv=[head,...rows].map(r=>r.map(x=>`"${String(x??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='netstar-fbt.csv'; a.click();
+};
+
+['fbtYear','grossType','defDays'].forEach(id=>$(id).addEventListener('input',render));
+render();
+</script>
+</body>
+</html>
