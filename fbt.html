@@ -77,6 +77,7 @@ summary{font-size:12px;font-weight:600;color:var(--blue);cursor:pointer}
 
 @media(max-width:720px){.tiles{grid-template-columns:repeat(2,1fr)}h1{font-size:19px}}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -127,9 +128,14 @@ summary{font-size:12px;font-weight:600;color:var(--blue);cursor:pointer}
           <label>&nbsp;</label>
           <button class="btn-primary" id="loadLive">Load live fleet</button>
         </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn-ghost" id="loadRegisterBtn">Load fleet register (.xlsx)</button>
+          <input id="registerFile" type="file" accept=".xlsx,.xls" style="display:none">
+        </div>
         <div class="status-line" id="loadStatus"></div>
       </div>
-      <p class="note" style="margin-top:10px">Pulls the live fleet from your FTC worker (<code>/fleetai/fbt-data</code>), enriching make/model/type per vehicle from the object-status feed, and classifies every vehicle automatically. Statutory rate is a flat <strong>20%</strong>; councils pay FBT in full (no rebate/exemption cap applied).</p>
+      <p class="note" style="margin-top:10px"><strong>Two ways to load:</strong> <em>Load live fleet</em> pulls from the worker (<code>/fleetai/fbt-data</code>); <em>Load fleet register</em> reads the council&#x2019;s register spreadsheet (the <code>Vehicle List</code> sheet) for authoritative make/model, cab type, GVM and category &mdash; recommended, since it classifies cab type and heavy vehicles precisely. Statutory rate is a flat <strong>20%</strong>; councils pay FBT in full (no rebate/exemption cap).</p>
 
       <details>
         <summary>Make/model coming through wrong? Overlay Rick&#x2019;s object-status feed</summary>
@@ -148,7 +154,7 @@ summary{font-size:12px;font-weight:600;color:var(--blue);cursor:pointer}
   </div>
 
   <div class="card">
-    <h2><span class="dot"></span>Vehicles</h2>
+    <h2><span class="dot"></span>Vehicles <span id="vcount" class="status-line" style="margin-left:auto;font-weight:400"></span></h2>
     <div class="tablewrap">
       <table>
         <thead><tr>
@@ -192,12 +198,14 @@ function classifyVehicle(v, year){
   const model=(v.model||'').toLowerCase().trim();
   const fuel=(v.fuel||'').toLowerCase().trim();
   const vtype=(v.vtype||'').toLowerCase().trim();
+  const cab=(v.cab||'').toLowerCase().trim();
+  const cat=(v.category||'').toLowerCase().trim();
   const hay=(make+' '+model+' '+(vtype==='default'?'':vtype)).trim();
   const base=Number(v.baseValue)||0;
   const gvm=Number(v.gvm)||0;
 
   if(!hay || DEVICE_JUNK.test(make) || DEVICE_JUNK.test(model))
-    return {status:'review',label:'Review',badge:'b-rev',reason:'Make/model missing or showing a device code in the feed \u2014 enter the real make/model, or use the object-status overlay above.'};
+    return {status:'review',label:'Review',badge:'b-rev',reason:'Make/model missing or showing a device code \u2014 enter the real make/model, or load the fleet register.'};
 
   const isEV=EV_FUELS.includes(fuel)||EV_MODELS.some(m=>hay.includes(m));
   if(isEV){
@@ -206,20 +214,28 @@ function classifyVehicle(v, year){
     return {status:'review',label:'Review',badge:'b-rev',reason:'Electric \u2014 add base value to confirm it\u2019s under the EV exemption threshold.'};
   }
 
-  if(gvm>=4500) return {status:'exempt-workhorse',label:'Likely exempt',badge:'b-ok',reason:`Heavy vehicle (GVM ${gvm.toLocaleString()}kg). Not a car for FBT; exempt if private use is limited.`};
+  // Category from the fleet register decides most of the fleet outright
+  if(/heavy|truck|tractor|plant|sweeper|trailer|mobile/.test(cat))
+    return {status:'exempt-workhorse',label:'Exempt',badge:'b-ok',reason:`${v.category} \u2014 not a car for FBT purposes. Off-road plant and heavy vehicles fall outside car FBT.`};
+
+  if(cab==='tri-axle'||cab==='quad axle'||gvm>=4500)
+    return {status:'exempt-workhorse',label:'Exempt',badge:'b-ok',reason:`Heavy vehicle${gvm?` (GVM ${gvm.toLocaleString()}kg)`:''} \u2014 not a car for FBT; exempt if private use is limited.`};
 
   const isUte=/ute|cab chassis|hilux|ranger|triton|d-?max|navara|colorado|bt-?50|amarok/.test(hay);
-  const single=/single|s\/?cab/.test(hay);
-  const dual=/dual|d\/?cab|crew/.test(hay);
+  const single=cab==='single'||/single|s\/?cab/.test(hay);
+  const dual=cab==='dual'||/dual|d\/?cab|crew/.test(hay);
 
-  if(WORKHORSE.some(w=>hay.includes(w))||(isUte&&single))
-    return {status:'exempt-workhorse',label:'Likely exempt',badge:'b-ok',reason:'Commercial / workhorse vehicle not principally designed to carry passengers. Exempt if private use is limited to home\u2194work plus minor, infrequent trips.'};
-
-  if(isUte&&dual) return {status:'review',label:'Review',badge:'b-warn',reason:'Dual-cab ute. Exempt only if it carries \u22651 tonne or isn\u2019t principally for passengers, AND private use is limited (ATO MT 2024/1).'};
+  if(isUte&&single)
+    return {status:'exempt-workhorse',label:'Likely exempt',badge:'b-ok',reason:'Single-cab ute \u2014 commercial workhorse not principally designed to carry passengers. Exempt if private use is limited to home\u2194work plus minor, infrequent trips.'};
+  if(isUte&&dual)
+    return {status:'review',label:'Review',badge:'b-warn',reason:'Dual-cab ute. Exempt only if it carries \u22651 tonne or isn\u2019t principally for passengers, AND private use is limited (ATO MT 2024/1). Confirm payload.'};
   if(isUte) return {status:'review',label:'Review',badge:'b-warn',reason:'Ute \u2014 confirm single vs dual cab. Single-cab normally exempt; dual-cab needs the load/passenger test.'};
 
+  if(WORKHORSE.some(w=>hay.includes(w)))
+    return {status:'review',label:'Review',badge:'b-warn',reason:'Commercial van \u2014 workhorse-exempt IF it\u2019s a cargo van (not a people-mover) and private use is limited. Confirm seating/fit-out.'};
+
   if(PASSENGER.some(p=>hay.includes(p))) return {status:'taxable',label:'FBT applies',badge:'b-tax',reason:'Passenger vehicle available for private use \u2014 taxed under the statutory formula.'};
-  return {status:'review',label:'Review',badge:'b-warn',reason:'Body type unclear from make/model \u2014 confirm whether it\u2019s a passenger car or commercial vehicle.'};
+  return {status:'taxable',label:'FBT applies',badge:'b-tax',reason:'Light passenger vehicle \u2014 taxed under the statutory formula unless it qualifies as a commercial workhorse.'};
 }
 
 /* ---- STATUTORY FORMULA ---- */
@@ -256,9 +272,12 @@ function render(){
   const tb=$('rows');
   if(!data.length){ tb.innerHTML='<tr><td colspan="13" style="padding:22px;text-align:center;color:var(--muted)">No vehicles loaded. Click <strong>Load live fleet</strong> or add one manually.</td></tr>'; }
   else { tb.innerHTML=''; }
-  let totalFbt=0,nTax=0,nExempt=0,nReview=0;
+  let totalFbt=0,nTax=0,nExempt=0,nReview=0,nExcluded=0,nShown=0;
 
   data.forEach((v,i)=>{
+    // hold back live-loaded records that have no real make/model (tracker-only)
+    if(v._loaded && !(v.make||'').trim()){ nExcluded++; return; }
+    nShown++;
     const cls=classifyVehicle(v,year);
     let taxable=null,fbt=null;
     if(cls.status==='taxable'){ const c=calcStatutoryFBT(v,year,gt,defDays); taxable=c.taxable; fbt=c.fbt; if(fbt)totalFbt+=fbt; nTax++; }
@@ -280,7 +299,9 @@ function render(){
       <td class="num"><strong>${fmt(fbt)}</strong></td>`;
     tb.appendChild(tr);
   });
+  if(nShown===0 && data.length){ tb.innerHTML='<tr><td colspan="13" style="padding:22px;text-align:center;color:var(--muted)">No vehicles with make/model yet \u2014 still resolving, or none in the feed.</td></tr>'; }
   $('t-fbt').textContent=fmt(totalFbt); $('t-tax').textContent=nTax; $('t-exempt').textContent=nExempt; $('t-review').textContent=nReview;
+  $('vcount').textContent = data.length ? `${nShown} shown${nExcluded?` \u00b7 ${nExcluded} excluded (tracker-only / no make-model)`:''}` : '';
 }
 
 $('rows').addEventListener('input',e=>{
@@ -292,20 +313,68 @@ $('rows').addEventListener('input',e=>{
 
 async function loadLive(){
   const client=$('client').value, st=$('loadStatus'), btn=$('loadLive');
-  btn.disabled=true; st.textContent='Loading\u2026';
+  btn.disabled=true;
+  const prior={}; data.forEach(v=>{ if(v.asset) prior[v.asset]={baseValue:v.baseValue,days:v.days,contrib:v.contrib}; });
   try{
-    const res=await fetch(`${BASE}/fleetai/fbt-data?client=${client}`);
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const j=await res.json();
-    const list=j.vehicles||[];
-    data=list.map(v=>({ asset:v.registration||v.imei||'', imei:v.imei||'', driver:v.driver||'', make:v.make||'', model:v.model||'', vtype:v.vehicle_type||'', fuel:v.fuel_type||'', gvm:v.gvm_kg||0, baseValue:'', days:'', contrib:0 }));
-    st.textContent=`Loaded ${data.length} vehicles. Add base values to compute FBT dollars.`;
-    render();
+    let pending=Infinity, pass=0;
+    while(pending>0 && pass<15){
+      pass++;
+      st.textContent = pass===1 ? 'Loading fleet\u2026' : `Resolving make/model\u2026 ${pending} to go`;
+      const res=await fetch(`${BASE}/fleetai/fbt-data?client=${client}`);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const j=await res.json();
+      const list=j.vehicles||[];
+      data=list.map(v=>{ const p=prior[v.registration||v.imei||'']||{}; return { asset:v.registration||v.imei||'', imei:v.imei||'', driver:v.driver||'', make:v.make||'', model:v.model||'', vtype:v.vehicle_type||'', fuel:v.fuel_type||'', gvm:v.gvm_kg||0, _loaded:true, baseValue:p.baseValue??'', days:p.days??'', contrib:p.contrib??0 }; });
+      render();
+      pending = j.pending||0;
+      if(pending>0) await new Promise(r=>setTimeout(r,800));
+    }
+    const unresolved = data.filter(v=>!v.make).length;
+    st.textContent=`Loaded ${data.length} vehicles${unresolved?` \u2014 ${unresolved} still without make/model (no data in feed)`:''}. Add base values to compute FBT dollars.`;
   }catch(e){ st.textContent='Couldn\u2019t load: '+e.message+' \u2014 check the client and that the worker is up.'; }
   finally{ btn.disabled=false; }
 }
 
 $('loadLive').onclick=loadLive;
+
+// ---- Load from the council fleet register (.xlsx) ----
+$('loadRegisterBtn').onclick=()=>$('registerFile').click();
+$('registerFile').onchange=(e)=>{
+  const file=e.target.files[0]; if(!file) return;
+  const st=$('loadStatus'); st.textContent='Reading register\u2026';
+  const reader=new FileReader();
+  reader.onload=(ev)=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
+      const sheet=wb.Sheets['Vehicle List']||wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(sheet,{defval:''});
+      const pick=(o,...names)=>{ for(const n of names){ const k=Object.keys(o).find(k=>k.toLowerCase().trim()===n.toLowerCase()); if(k) return o[k]; } return ''; };
+      const cleanS=x=>String(x==null?'':x).trim();
+      const prior={}; data.forEach(v=>{ if(v.asset) prior[v.asset]={baseValue:v.baseValue,days:v.days,contrib:v.contrib}; });
+      data=rows.map(o=>{
+        const objName=cleanS(pick(o,'Object Name'));
+        const asset=cleanS(pick(o,'Asset No.','Asset No','Asset'))|| (objName.split(/\s+/)[0]||'');
+        const driver=objName.replace(/^\S+\s+/,'');
+        const gvmRaw=pick(o,'Weight Capacity (GVM)','GVM','Weight Capacity');
+        const p=prior[asset]||{};
+        return {
+          asset, imei:'', driver,
+          make: cleanS(pick(o,'Object Brand','Brand','Make')),
+          model: cleanS(pick(o,'Object Model','Model')),
+          cab: cleanS(pick(o,'Object Axel','Axel','Cab')),
+          category: cleanS(pick(o,'Category')),
+          fuel: cleanS(pick(o,'Fuel Type','Fuel')),
+          gvm: Number(String(gvmRaw).replace(/[^0-9.]/g,''))||0,
+          vtype:'', _loaded:true, baseValue:p.baseValue??'', days:p.days??'', contrib:p.contrib??0
+        };
+      }).filter(v=>v.asset||v.make||v.model);
+      render();
+      const withData=data.filter(v=>(v.make||'').trim()).length;
+      st.textContent=`Loaded ${data.length} vehicles from register (${withData} with make/model). Add base values to compute FBT dollars.`;
+    }catch(err){ st.textContent='Couldn\u2019t read that file: '+err.message; }
+  };
+  reader.readAsArrayBuffer(file);
+};
 $('addRow').onclick=()=>{ data.push({asset:'',driver:'',make:'',model:'',fuel:'',gvm:0,baseValue:'',days:'',contrib:0}); render(); };
 
 $('applyOverlay').onclick=()=>{
